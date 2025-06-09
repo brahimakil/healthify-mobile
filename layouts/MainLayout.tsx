@@ -1,12 +1,13 @@
+import { useTheme } from '@/context/ThemeContext'
 import React, { useEffect, useRef, useState } from 'react'
 import {
-    Animated,
-    BackHandler,
-    Dimensions,
-    Platform,
-    StyleSheet,
-    TouchableWithoutFeedback,
-    View
+  Animated,
+  BackHandler,
+  Dimensions,
+  Platform,
+  StyleSheet,
+  TouchableWithoutFeedback,
+  View
 } from 'react-native'
 import { Header } from '../components/Header'
 import { Sidebar } from '../components/Sidebar'
@@ -59,6 +60,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const slideAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current
   const overlayOpacity = useRef(new Animated.Value(0)).current
+  const { theme } = useTheme()
 
   useEffect(() => {
     const backAction = () => {
@@ -132,7 +134,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
       <Header
         title={title}
         onMenuPress={handleMenuPress}
@@ -142,44 +144,45 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         userPhotoURL={user?.photoURL}
       />
       
-      <View style={styles.content}>
+      <View style={[styles.content, { backgroundColor: theme.background }]}>
         {children}
       </View>
       
-      {/* Always render sidebar overlay, control visibility with opacity and position */}
-      <View style={[styles.sidebarOverlay, { 
-        pointerEvents: sidebarOpen ? 'auto' : 'none' 
-      }]}>
-        {/* Dark overlay background */}
+      {/* Sidebar Overlay */}
+      {sidebarOpen && (
         <TouchableWithoutFeedback onPress={closeSidebar}>
           <Animated.View 
             style={[
-              styles.overlay,
-              { opacity: overlayOpacity }
+              styles.overlay, 
+              { 
+                opacity: overlayOpacity,
+                backgroundColor: theme.mode === 'dark' ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.5)'
+              }
             ]} 
           />
         </TouchableWithoutFeedback>
-        
-        {/* Sidebar Container */}
-        <Animated.View 
-          style={[
-            styles.sidebarContainer,
-            {
-              left: slideAnim,
-              width: SIDEBAR_WIDTH,
-            }
-          ]}
-        >
-          <Sidebar
-            activeRoute={activeRoute}
-            onNavigate={handleNavigate}
-            onLogout={handleLogout}
-            userName={user?.name}
-            userEmail={user?.email}
-            userPhotoURL={user?.photoURL}
-          />
-        </Animated.View>
-      </View>
+      )}
+
+      {/* Sidebar */}
+      <Animated.View 
+        style={[
+          styles.sidebar, 
+          { 
+            transform: [{ translateX: slideAnim }],
+            backgroundColor: theme.background,
+            borderRightColor: theme.mode === 'dark' ? '#374151' : '#E5E7EB'
+          }
+        ]}
+      >
+        <Sidebar
+          activeRoute={activeRoute}
+          onNavigate={handleNavigate}
+          onLogout={handleLogout}
+          userName={user?.name}
+          userEmail={user?.email}
+          userPhotoURL={user?.photoURL}
+        />
+      </Animated.View>
     </View>
   )
 }
@@ -187,7 +190,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
   },
   content: {
     flex: 1,
@@ -226,5 +228,12 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' && {
       boxShadow: '2px 0 10px rgba(0, 0, 0, 0.25)',
     }),
+  },
+  sidebar: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: SIDEBAR_WIDTH,
+    zIndex: 1001,
   },
 }) 

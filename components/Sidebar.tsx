@@ -1,16 +1,17 @@
+import { useTheme } from '@/context/ThemeContext'
 import { useRouter } from 'expo-router'
 import React from 'react'
 import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-    ChevronRightIcon,
-    DashboardIcon,
-    LogoutIcon,
-    NutritionIcon,
-    SettingsIcon,
-    SleepIcon,
-    WaterIcon,
-    WorkoutIcon
+  ChevronRightIcon,
+  DashboardIcon,
+  LogoutIcon,
+  NutritionIcon,
+  SettingsIcon,
+  SleepIcon,
+  WaterIcon,
+  WorkoutIcon
 } from './icons/IconComponents'
 
 interface SidebarProps {
@@ -80,121 +81,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const currentPath = activeRoute
+  const { theme } = useTheme()
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* App Branding */}
-      <View style={styles.brandContainer}>
-        <View style={styles.logoContainer}>
-          <View style={styles.logo}>
-            <Text style={styles.logoText}>H</Text>
-          </View>
-          <View style={styles.brandTextContainer}>
-            <Text style={styles.appName}>Healthify</Text>
-            <Text style={styles.appTagline}>Health Companion</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* User Profile Section */}
-      <View style={styles.userSection}>
-        <View style={styles.userInfo}>
-          <View style={styles.userAvatar}>
-            <Text style={styles.userAvatarText}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 20, backgroundColor: theme.background }]}>
+        <View style={[styles.userInfo, { borderBottomColor: theme.mode === 'dark' ? '#374151' : '#E5E7EB' }]}>
+          <View style={[styles.avatar, { backgroundColor: theme.mode === 'dark' ? '#374151' : '#F3F4F6' }]}>
+            <Text style={[styles.avatarText, { color: theme.text }]}>
               {userName.charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={styles.userDetails}>
-            <Text style={styles.userName} numberOfLines={1}>{userName}</Text>
-            <Text style={styles.userEmail} numberOfLines={1}>{userEmail}</Text>
-          </View>
-        </View>
-        <View style={styles.userStats}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>7</Text>
-            <Text style={styles.statLabel}>Streak</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>85%</Text>
-            <Text style={styles.statLabel}>Goals</Text>
+            <Text style={[styles.userName, { color: theme.text }]}>{userName}</Text>
+            {userEmail && (
+              <Text style={[styles.userEmail, { color: theme.mode === 'dark' ? '#9CA3AF' : '#6B7280' }]}>
+                {userEmail}
+              </Text>
+            )}
           </View>
         </View>
       </View>
 
-      <View style={styles.separator} />
-
-      {/* Navigation Menu */}
-      <ScrollView 
-        style={styles.menuContainer} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.menuContent}
-      >
-        <Text style={styles.menuTitle}>Menu</Text>
+      <ScrollView style={styles.menuContainer} showsVerticalScrollIndicator={false}>
         {menuItems.map((item) => {
+          const isActive = activeRoute === item.id
           const IconComponent = item.icon
-          const isActive = activeRoute === item.route
           
           return (
             <TouchableOpacity
               key={item.id}
               style={[
                 styles.menuItem,
-                isActive && styles.menuItemActive
+                isActive && { backgroundColor: theme.mode === 'dark' ? '#374151' : '#F3F4F6' }
               ]}
-              onPress={() => {
-                console.log('Menu item clicked:', item.route)
-                item.route && onNavigate(item.route)
-              }}
+              onPress={() => onNavigate(item.route)}
               activeOpacity={0.7}
             >
-              <View style={styles.menuItemLeft}>
-                <View style={[
-                  styles.menuIconContainer,
-                  isActive && styles.menuIconContainerActive
-                ]}>
-                  <IconComponent 
-                    size={18} 
-                    color={isActive ? '#10B981' : '#6B7280'} 
-                    strokeWidth={2}
-                  />
-                </View>
-                <View style={styles.menuTextContainer}>
+              <View style={styles.menuItemContent}>
+                <IconComponent 
+                  size={20} 
+                  color={isActive ? '#10B981' : (theme.mode === 'dark' ? '#9CA3AF' : '#6B7280')} 
+                />
+                <View style={styles.menuItemText}>
                   <Text style={[
-                    styles.menuLabel,
-                    isActive && styles.menuLabelActive
+                    styles.menuItemLabel,
+                    { color: isActive ? '#10B981' : theme.text }
                   ]}>
                     {item.label}
                   </Text>
-                  <Text style={styles.menuDescription}>
+                  <Text style={[
+                    styles.menuItemDescription,
+                    { color: theme.mode === 'dark' ? '#9CA3AF' : '#6B7280' }
+                  ]}>
                     {item.description}
                   </Text>
                 </View>
               </View>
               <ChevronRightIcon 
-                size={14} 
-                color={isActive ? '#10B981' : '#D1D5DB'} 
+                size={16} 
+                color={theme.mode === 'dark' ? '#9CA3AF' : '#6B7280'} 
               />
             </TouchableOpacity>
           )
         })}
       </ScrollView>
 
-      <View style={styles.separator} />
-
-      {/* Logout Section */}
-      <View style={styles.logoutSection}>
-        <TouchableOpacity 
-          style={styles.logoutButton} 
-          onPress={() => {
-            console.log('Logout clicked')
-            onLogout()
-          }}
+      <View style={[styles.footer, { borderTopColor: theme.mode === 'dark' ? '#374151' : '#E5E7EB' }]}>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={onLogout}
           activeOpacity={0.7}
         >
-          <View style={styles.logoutIconContainer}>
-            <LogoutIcon size={18} color="#EF4444" />
-          </View>
+          <LogoutIcon size={20} color="#EF4444" />
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
@@ -209,51 +168,9 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: '#F3F4F6',
   },
-  brandContainer: {
+  header: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  logo: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  logoText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  brandTextContainer: {
-    flex: 1,
-  },
-  appName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-    letterSpacing: -0.5,
-  },
-  appTagline: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 1,
-  },
-  userSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
   },
   userInfo: {
     flexDirection: 'row',
@@ -261,7 +178,7 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 12,
   },
-  userAvatar: {
+  avatar: {
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -274,7 +191,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  userAvatarText: {
+  avatarText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
@@ -293,54 +210,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  userStats: {
-    flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  stat: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#10B981',
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 12,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-    marginHorizontal: 16,
-  },
   menuContainer: {
     flex: 1,
-  },
-  menuContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  menuTitle: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 12,
   },
   menuItem: {
     flexDirection: 'row',
@@ -351,45 +222,25 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 2,
   },
-  menuItemActive: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-  },
-  menuItemLeft: {
+  menuItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  menuIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#F9FAFB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  menuIconContainerActive: {
-    backgroundColor: '#DCFCE7',
-  },
-  menuTextContainer: {
+  menuItemText: {
     flex: 1,
   },
-  menuLabel: {
+  menuItemLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
     marginBottom: 1,
   },
-  menuLabelActive: {
-    color: '#10B981',
-  },
-  menuDescription: {
+  menuItemDescription: {
     fontSize: 11,
     color: '#9CA3AF',
   },
-  logoutSection: {
+  footer: {
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
@@ -403,32 +254,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FECACA',
   },
-  logoutIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#FEE2E2',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
   logoutText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#EF4444',
     flex: 1,
-  },
-  menuText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  activeMenuItem: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-  },
-  activeMenuText: {
-    color: '#10B981',
   },
 }) 

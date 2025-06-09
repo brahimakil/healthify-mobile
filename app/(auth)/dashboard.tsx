@@ -3,12 +3,12 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import React, { useEffect, useState } from 'react'
 import { Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import {
-    ChevronRightIcon,
-    NutritionIcon,
-    PlusIcon,
-    SleepIcon,
-    WaterIcon,
-    WorkoutIcon
+  ChevronRightIcon,
+  NutritionIcon,
+  PlusIcon,
+  SleepIcon,
+  WaterIcon,
+  WorkoutIcon
 } from '../../components/icons/IconComponents'
 import { ProtectedRoute } from '../../components/ProtectedRoute'
 import { useAuth } from '../../hooks/useAuth'
@@ -285,7 +285,7 @@ export default function Dashboard() {
         router.push('/(auth)/hydration')
         break
       case 'settings':
-        Alert.alert('Coming Soon', 'Settings page is under development')
+        router.push('/settings')
         break
     }
   }

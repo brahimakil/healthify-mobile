@@ -2,15 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
@@ -19,8 +19,8 @@ import { MainLayout } from '../../layouts/MainLayout';
 import { PlanGenerationService } from '../../services/planGenerationService';
 import { sleepService } from '../../services/sleepService';
 import {
-    DailySleepSummary,
-    WeeklySleepStats
+  DailySleepSummary,
+  WeeklySleepStats
 } from '../../types/sleep';
 
 // Import Picker properly
@@ -83,22 +83,22 @@ export default function SleepScreen() {
     switch (route) {
       case 'dashboard':
         router.push('/(auth)/dashboard');
-        break;
+        break
       case 'nutrition':
         router.push('/(auth)/nutrition');
-        break;
+        break
       case 'workouts':
         router.push('/(auth)/workouts');
-        break;
+        break
       case 'sleep':
         // Already on sleep page
-        break;
+        break
       case 'hydration':
         router.push('/(auth)/hydration');
-        break;
+        break
       case 'settings':
-        Alert.alert('Coming Soon', 'Settings page is under development');
-        break;
+        router.push('/(auth)/settings');
+        break
       default:
         console.log('Unknown route:', route);
     }

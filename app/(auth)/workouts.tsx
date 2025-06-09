@@ -2,27 +2,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import { useAuth } from '../../hooks/useAuth';
 import { MainLayout } from '../../layouts/MainLayout';
+import { AIWorkoutSuggestionService, WorkoutSuggestion } from '../../services/aiWorkoutSuggestionService';
 import { PlanGenerationService } from '../../services/planGenerationService';
 import {
-    DailyWorkoutSummary,
-    DayWorkoutPlan,
-    Exercise,
-    PlannedExercise,
-    workoutService
+  DailyWorkoutSummary,
+  DayWorkoutPlan,
+  Exercise,
+  PlannedExercise,
+  workoutService
 } from '../../services/workoutService';
 
 interface AddExerciseModalData {
@@ -65,13 +66,16 @@ export default function WorkoutsScreen() {
   } | null>(null);
   const [completionWeight, setCompletionWeight] = useState('');
   const [completionNotes, setCompletionNotes] = useState('');
-  const [apiStatus, setApiStatus] = useState<{
-    isConfigured: boolean;
-    message: string;
-    exerciseCount?: number;
-  } | null>(null);
   const [currentPlan, setCurrentPlan] = useState<any>(null)
   const [showPlanInfo, setShowPlanInfo] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState<WorkoutSuggestion | null>(null)
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
+  const [showAISuggestion, setShowAISuggestion] = useState(false)
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false)
+  const [exerciseToDelete, setExerciseToDelete] = useState<{
+    exercise: PlannedExercise;
+    index: number;
+  } | null>(null)
 
   // Navigation handler for MainLayout
   const handleNavigate = (route: string) => {
@@ -87,21 +91,13 @@ export default function WorkoutsScreen() {
         // Already on workouts page
         break;
       case 'sleep':
-        console.log('💪 Workouts: Attempting to navigate to sleep...');
-        console.log('💪 Workouts: Current route before navigation');
-        try {
-          router.push('/(auth)/sleep');
-          console.log('💪 Workouts: Navigation to sleep initiated');
-        } catch (error) {
-          console.error('💪 Workouts: Navigation error:', error);
-          Alert.alert('Navigation Error', 'Failed to navigate to sleep page');
-        }
+        router.push('/(auth)/sleep');
         break;
       case 'hydration':
         router.push('/(auth)/hydration');
         break;
       case 'settings':
-        Alert.alert('Coming Soon', 'Settings page is under development');
+        router.push('/(auth)/settings');
         break;
       default:
         console.log('Unknown route:', route);
@@ -119,19 +115,16 @@ export default function WorkoutsScreen() {
   useEffect(() => {
     if (user?.uid) {
       loadWorkoutData();
-      checkApiStatus();
       loadCurrentPlan();
     }
   }, [user?.uid]);
 
-  const checkApiStatus = async () => {
-    try {
-      const status = await workoutService.checkApiStatus();
-      setApiStatus(status);
-    } catch (error) {
-      console.error('Error checking API status:', error);
+  // Load AI suggestions when user and current plan are available
+  useEffect(() => {
+    if (user?.uid && currentPlan) {
+      loadAIWorkoutSuggestion();
     }
-  };
+  }, [user?.uid, currentPlan]);
 
   const loadWorkoutData = async () => {
     if (!user?.uid) return;
@@ -292,63 +285,69 @@ export default function WorkoutsScreen() {
   };
 
   const handleRemoveExercise = async (exerciseIndex: number) => {
-    if (!user?.uid) return;
+    console.log('🗑️ handleRemoveExercise called with index:', exerciseIndex)
+    
+    if (!user?.uid) {
+      console.error('❌ No user found')
+      return
+    }
 
-    Alert.alert(
-      'Remove Exercise',
-      'Are you sure you want to remove this exercise from your plan?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await workoutService.removeExerciseFromDayPlan(user.uid, selectedDay, exerciseIndex);
-              await loadWorkoutData();
-              Alert.alert('Success', 'Exercise removed from your plan');
-            } catch (error) {
-              console.error('Error removing exercise:', error);
-              Alert.alert('Error', 'Failed to remove exercise');
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
+    const dayPlan = weeklyPlan[selectedDay]
+    if (!dayPlan || !dayPlan.exercises[exerciseIndex]) {
+      console.error('❌ Exercise not found:', { 
+        selectedDay, 
+        exerciseIndex, 
+        hasDay: !!dayPlan,
+        exerciseCount: dayPlan?.exercises?.length || 0
+      })
+      return
+    }
+
+    const exerciseToRemove = dayPlan.exercises[exerciseIndex]
+    console.log('🎯 Exercise to remove:', exerciseToRemove)
+
+    // Set the exercise to delete and show confirmation modal
+    setExerciseToDelete({
+      exercise: exerciseToRemove,
+      index: exerciseIndex
+    })
+    setShowDeleteConfirmation(true)
+    console.log('🔔 Showing delete confirmation modal')
+  }
+
+  const performExerciseDeletion = async () => {
+    if (!exerciseToDelete || !user?.uid) return
+
+    try {
+      console.log('🚀 Starting exercise removal...')
+      setLoading(true)
+      
+      await workoutService.removeExerciseFromDayPlan(
+        user.uid, 
+        selectedDay, 
+        exerciseToDelete.index
+      )
+      console.log('✅ Exercise removed from service')
+      
+      await loadWorkoutData()
+      console.log('✅ Workout data reloaded')
+      
+      console.log(`✅ Successfully removed "${exerciseToDelete.exercise.exerciseName}"`)
+      
+    } catch (error) {
+      console.error('❌ Error removing exercise:', error)
+    } finally {
+      setLoading(false)
+      setShowDeleteConfirmation(false)
+      setExerciseToDelete(null)
+    }
+  }
 
   const filteredExercises = exercises.filter(exercise =>
     exercise.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     exercise.bodyPart?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     exercise.target?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const renderApiStatus = () => {
-    if (!apiStatus) return null;
-
-    return (
-      <View style={[
-        styles.apiStatusContainer,
-        { backgroundColor: apiStatus.isConfigured ? '#F0FDF4' : '#FEF3C7' }
-      ]}>
-        <Ionicons
-          name={apiStatus.isConfigured ? 'checkmark-circle' : 'warning'}
-          size={20}
-          color={apiStatus.isConfigured ? '#10B981' : '#F59E0B'}
-        />
-        <Text style={[
-          styles.apiStatusText,
-          { color: apiStatus.isConfigured ? '#065F46' : '#92400E' }
-        ]}>
-          {apiStatus.message}
-          {apiStatus.exerciseCount && ` (${apiStatus.exerciseCount} exercises available)`}
-        </Text>
-      </View>
-    );
-  };
 
   const renderTodaysSummary = () => {
     // Add debug logging
@@ -486,7 +485,9 @@ export default function WorkoutsScreen() {
                     )}
                     <TouchableOpacity
                       style={styles.removeButton}
-                      onPress={() => handleRemoveExercise(index)}
+                      onPress={() => {
+                        handleRemoveExercise(index);
+                      }}
                     >
                       <Ionicons name="trash-outline" size={16} color="#EF4444" />
                     </TouchableOpacity>
@@ -780,6 +781,341 @@ export default function WorkoutsScreen() {
     </Modal>
   )
 
+  const loadAIWorkoutSuggestion = async () => {
+    if (!user?.uid) return
+    
+    try {
+      setSuggestionLoading(true)
+      console.log('🤖 Loading AI workout suggestion for tomorrow')
+      
+      const userPreferences = currentPlan ? {
+        healthGoal: currentPlan.healthGoal,
+        fitnessLevel: 'intermediate',
+        preferredFocus: currentPlan.workoutPlan?.recommendedFocus || [],
+        availableEquipment: ['bodyweight', 'dumbbells']
+      } : undefined
+      
+      const suggestion = await AIWorkoutSuggestionService.generateTomorrowWorkoutSuggestion(
+        user.uid,
+        userPreferences
+      )
+      
+      console.log('✅ AI workout suggestion loaded:', suggestion)
+      setAiSuggestion(suggestion)
+      
+    } catch (error) {
+      console.error('❌ Error loading AI workout suggestion:', error)
+    } finally {
+      setSuggestionLoading(false)
+    }
+  }
+
+  const applyAISuggestion = async () => {
+    console.log('🚀 applyAISuggestion called')
+    
+    if (!aiSuggestion || !user?.uid) {
+      console.error('❌ Missing data for applying AI suggestion')
+      return
+    }
+
+    if (!aiSuggestion.suggestedExercises || aiSuggestion.suggestedExercises.length === 0) {
+      console.error('❌ No exercises found in AI suggestion')
+      return
+    }
+
+    try {
+      console.log(`🤖 Starting to apply ${aiSuggestion.suggestedExercises.length} exercises to ${aiSuggestion.dayOfWeek}`)
+      
+      setLoading(true)
+      
+      // Get current day plan to check for duplicates
+      const currentDayPlan = weeklyPlan[aiSuggestion.dayOfWeek]
+      const existingExerciseNames = currentDayPlan?.exercises?.map(ex => ex.exerciseName.toLowerCase()) || []
+      
+      console.log('📋 Current exercises in plan:', existingExerciseNames)
+      
+      let successCount = 0
+      let errorCount = 0
+      let duplicateCount = 0
+      const duplicateExercises: string[] = []
+      const newExercises: string[] = []
+
+      // Check each suggested exercise for duplicates
+      for (let i = 0; i < aiSuggestion.suggestedExercises.length; i++) {
+        const exercise = aiSuggestion.suggestedExercises[i]
+        
+        // Check if exercise already exists
+        if (existingExerciseNames.includes(exercise.name.toLowerCase())) {
+          console.log(`⚠️ Exercise already exists: ${exercise.name}`)
+          duplicateCount++
+          duplicateExercises.push(exercise.name)
+          continue
+        }
+        
+        try {
+          console.log(`➕ Adding NEW exercise ${i + 1}/${aiSuggestion.suggestedExercises.length}: ${exercise.name}`)
+          
+          if (!exercise.name || !exercise.id) {
+            console.error('❌ Invalid exercise data:', exercise)
+            errorCount++
+            continue
+          }
+
+          await workoutService.addExerciseToDayPlan(
+            user.uid,
+            aiSuggestion.dayOfWeek,
+            exercise,
+            3, // Default sets
+            10, // Default reps
+            undefined, // duration
+            60, // rest time in seconds
+            undefined, // weight
+            `Added from AI suggestion - ${aiSuggestion.validationStatus}`
+          )
+          
+          successCount++
+          newExercises.push(exercise.name)
+          console.log(`✅ Successfully added: ${exercise.name}`)
+          
+        } catch (exerciseError) {
+          console.error(`❌ Failed to add exercise ${exercise.name}:`, exerciseError)
+          errorCount++
+        }
+      }
+
+      console.log(`📊 Apply results: ${successCount} new, ${duplicateCount} duplicates, ${errorCount} errors`)
+
+      // Reload workout data to show the changes
+      if (successCount > 0) {
+        console.log('🔄 Reloading workout data...')
+        await loadWorkoutData()
+      }
+      
+      // Show detailed result message
+      let message = ''
+      if (successCount > 0) {
+        message += `✅ Added ${successCount} new exercises:\n${newExercises.join(', ')}\n\n`
+      }
+      if (duplicateCount > 0) {
+        message += `⚠️ ${duplicateCount} exercises already in your plan:\n${duplicateExercises.join(', ')}\n\n`
+      }
+      if (errorCount > 0) {
+        message += `❌ ${errorCount} exercises failed to add\n\n`
+      }
+      
+      if (successCount === 0 && duplicateCount > 0) {
+        message += "All suggested exercises are already in your plan!"
+      }
+      
+      Alert.alert(
+        successCount > 0 ? 'Suggestions Applied!' : 'No New Exercises Added',
+        message.trim(),
+        [
+          {
+            text: successCount > 0 ? 'View Plan' : 'OK',
+            onPress: () => {
+              if (successCount > 0) {
+                setSelectedDay(aiSuggestion.dayOfWeek)
+              }
+            }
+          }
+        ]
+      )
+      
+      // Only clear suggestion if we added something new
+      if (successCount > 0) {
+        setAiSuggestion(null)
+      }
+      
+    } catch (error) {
+      console.error('❌ Critical error applying AI suggestion:', error)
+      Alert.alert(
+        'Error', 
+        `Failed to apply AI suggestions: ${error.message || 'Unknown error'}`
+      )
+    } finally {
+      setLoading(false)
+      console.log('✅ applyAISuggestion completed')
+    }
+  }
+
+  const renderAISuggestion = () => {
+    // Always show loading or result
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    
+    return (
+      <View style={styles.aiSuggestionContainer}>
+        <TouchableOpacity
+          style={styles.aiSuggestionHeader}
+          onPress={() => setShowAISuggestion(!showAISuggestion)}
+        >
+          <View style={styles.aiSuggestionHeaderLeft}>
+            <Text style={styles.aiSuggestionTitle}>
+              🤖 AI Suggestion for {aiSuggestion?.dayOfWeek || 'Tomorrow'}
+            </Text>
+            {suggestionLoading && (
+              <ActivityIndicator size="small" color="#10B981" style={{ marginLeft: 8 }} />
+            )}
+            {!suggestionLoading && !aiSuggestion && (
+              <Text style={styles.aiSuggestionError}>• Failed to load</Text>
+            )}
+            {aiSuggestion && (
+              <Text style={styles.aiSuggestionStatus}>
+                • {aiSuggestion.validationStatus === 'validated' ? '✅ AI' : 
+                   aiSuggestion.validationStatus === 'rule-based' ? '⚡ Smart' : '🔄 Fallback'}
+              </Text>
+            )}
+          </View>
+          <Text style={styles.aiSuggestionToggle}>
+            {showAISuggestion ? '▼' : '▶'}
+          </Text>
+        </TouchableOpacity>
+        
+        {showAISuggestion && (
+          <View style={styles.aiSuggestionContent}>
+            {suggestionLoading ? (
+              <View style={styles.aiSuggestionLoading}>
+                <ActivityIndicator size="large" color="#10B981" />
+                <Text style={styles.aiSuggestionLoadingText}>
+                  Analyzing your training patterns...
+                </Text>
+              </View>
+            ) : aiSuggestion ? (
+              <>
+                <Text style={styles.aiSuggestionReasoning}>
+                  {aiSuggestion.reasoning}
+                </Text>
+                
+                {aiSuggestion.recommendedFocus.length > 0 ? (
+                  <>
+                    <Text style={styles.aiSuggestionFocusTitle}>Recommended Focus:</Text>
+                    <View style={styles.aiSuggestionFocusContainer}>
+                      {aiSuggestion.recommendedFocus.map((focus, index) => (
+                        <View key={index} style={styles.aiSuggestionFocusChip}>
+                          <Text style={styles.aiSuggestionFocusText}>{focus}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    
+                    {aiSuggestion.suggestedExercises.length > 0 ? (
+                      <>
+                        <Text style={styles.aiSuggestionExercisesTitle}>
+                          Validated Exercises ({aiSuggestion.suggestedExercises.length}):
+                        </Text>
+                        <View style={styles.aiSuggestionExercisesList}>
+                          {aiSuggestion.suggestedExercises.slice(0, 4).map((exercise, index) => (
+                            <Text key={index} style={styles.aiSuggestionExerciseItem}>
+                              • {exercise.name} ({exercise.target})
+                            </Text>
+                          ))}
+                          {aiSuggestion.suggestedExercises.length > 4 && (
+                            <Text style={styles.aiSuggestionMoreExercises}>
+                              +{aiSuggestion.suggestedExercises.length - 4} more exercises
+                            </Text>
+                          )}
+                        </View>
+                        
+                        <TouchableOpacity
+                          style={[
+                            styles.aiSuggestionApplyButton,
+                            loading && styles.aiSuggestionApplyButtonDisabled
+                          ]}
+                          onPress={applyAISuggestion}
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <View style={styles.aiSuggestionApplyLoading}>
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                              <Text style={styles.aiSuggestionApplyText}>
+                                Applying...
+                              </Text>
+                            </View>
+                          ) : (
+                            <Text style={styles.aiSuggestionApplyText}>
+                              Apply {aiSuggestion.suggestedExercises.length} exercises to {aiSuggestion.dayOfWeek}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <Text style={styles.aiSuggestionNoExercises}>
+                        ⚠️ No exercises found for these focus areas. Try adding exercises manually.
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <View style={styles.aiSuggestionRestDay}>
+                    <Text style={styles.aiSuggestionRestText}>🛌 Rest Day Recommended</Text>
+                    <Text style={styles.aiSuggestionRestSubtext}>
+                      Take time to recover and prepare for your next workout session.
+                    </Text>
+                  </View>
+                )}
+              </>
+            ) : (
+              <View style={styles.aiSuggestionError}>
+                <Text style={styles.aiSuggestionErrorText}>
+                  ❌ Failed to generate suggestions. Please try refreshing the page.
+                </Text>
+                <TouchableOpacity
+                  style={styles.aiSuggestionRetryButton}
+                  onPress={loadAIWorkoutSuggestion}
+                >
+                  <Text style={styles.aiSuggestionRetryText}>🔄 Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    )
+  }
+
+  const renderDeleteConfirmationModal = () => (
+    <Modal
+      visible={showDeleteConfirmation}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowDeleteConfirmation(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.deleteConfirmationModal}>
+          <Text style={styles.deleteConfirmationTitle}>Remove Exercise</Text>
+          <Text style={styles.deleteConfirmationMessage}>
+            Are you sure you want to remove "{exerciseToDelete?.exercise.exerciseName}" 
+            from your {selectedDay} plan?
+          </Text>
+          
+          <View style={styles.deleteConfirmationButtons}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowDeleteConfirmation(false)
+                setExerciseToDelete(null)
+                console.log('❌ Delete cancelled by user')
+              }}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={performExerciseDeletion}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.deleteButtonText}>Remove</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  )
+
   if (loading && Object.keys(weeklyPlan).length === 0) {
     return (
       <ProtectedRoute>
@@ -817,8 +1153,8 @@ export default function WorkoutsScreen() {
         }}
       >
         <SafeAreaView style={styles.container}>
-          <ScrollView style={styles.scrollView}>
-            {/* Add Plan Info Header */}
+          <ScrollView style={styles.scrollContainer}>
+            {/* Plan Info Header */}
             {currentPlan && (
               <View style={styles.planHeader}>
                 <View style={styles.planHeaderLeft}>
@@ -836,7 +1172,8 @@ export default function WorkoutsScreen() {
               </View>
             )}
 
-            {renderApiStatus()}
+            {renderAISuggestion()}
+            
             {renderTodaysSummary()}
             {renderWeeklyPlan()}
             {renderSelectedDayPlan()}
@@ -907,6 +1244,9 @@ export default function WorkoutsScreen() {
           
           {/* Add Plan Info Modal */}
           <PlanInfoModal />
+          
+          {/* NEW: Delete Confirmation Modal */}
+          {renderDeleteConfirmationModal()}
         </SafeAreaView>
       </MainLayout>
     </ProtectedRoute>
@@ -918,34 +1258,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-  },
   scrollView: {
     flex: 1,
     padding: 16,
-  },
-  apiStatusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  apiStatusText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '500',
   },
   todayCard: {
     backgroundColor: 'white',
@@ -1336,18 +1651,16 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   cancelButton: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
     flex: 1,
-    marginRight: 8,
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
   },
   cancelButtonText: {
     color: '#374151',
     fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: '500',
   },
   completeButton: {
     backgroundColor: '#10B981',
@@ -1478,4 +1791,207 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     flex: 1,
   },
-}); 
+  aiSuggestionContainer: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  aiSuggestionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+  },
+  aiSuggestionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  aiSuggestionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#059669',
+  },
+  aiSuggestionToggle: {
+    fontSize: 14,
+    color: '#059669',
+    fontWeight: '600',
+  },
+  aiSuggestionContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  aiSuggestionReasoning: {
+    fontSize: 14,
+    color: '#047857',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  aiSuggestionFocusTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#065F46',
+    marginBottom: 8,
+  },
+  aiSuggestionFocusContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  aiSuggestionFocusChip: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  aiSuggestionFocusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  aiSuggestionExercisesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#065F46',
+    marginBottom: 8,
+  },
+  aiSuggestionExercisesList: {
+    marginBottom: 16,
+  },
+  aiSuggestionExerciseItem: {
+    fontSize: 13,
+    color: '#047857',
+    marginBottom: 2,
+  },
+  aiSuggestionMoreExercises: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  aiSuggestionApplyButton: {
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  aiSuggestionApplyText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  aiSuggestionApplyButtonDisabled: {
+    backgroundColor: '#9CA3AF',
+    opacity: 0.7,
+  },
+  aiSuggestionApplyLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiSuggestionRestDay: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  aiSuggestionRestText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 4,
+  },
+  aiSuggestionRestSubtext: {
+    fontSize: 14,
+    color: '#047857',
+    textAlign: 'center',
+  },
+  aiSuggestionError: {
+    color: '#EF4444',
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  aiSuggestionStatus: {
+    color: '#059669',
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  aiSuggestionLoading: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  aiSuggestionLoadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#059669',
+  },
+  aiSuggestionNoExercises: {
+    fontSize: 14,
+    color: '#F59E0B',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 12,
+  },
+  aiSuggestionErrorText: {
+    fontSize: 14,
+    color: '#EF4444',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  aiSuggestionRetryButton: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  aiSuggestionRetryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  deleteConfirmationModal: {
+    backgroundColor: 'white',
+    margin: 20,
+    borderRadius: 12,
+    padding: 24,
+    minWidth: 300,
+    maxWidth: 400,
+  },
+  deleteConfirmationTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  deleteConfirmationMessage: {
+    fontSize: 16,
+    color: '#4B5563',
+    marginBottom: 24,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  deleteConfirmationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  deleteButton: {
+    flex: 1,
+    backgroundColor: '#EF4444',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+});

@@ -1,34 +1,35 @@
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native'
 import {
-    AddMealIcon,
-    CaloriesIcon,
-    CarbsIcon,
-    CloseIcon,
-    CustomFoodIcon,
-    EditIcon,
-    FatIcon,
-    PlusIcon,
-    ProteinIcon,
-    SearchIcon,
-    TargetIcon
+  AddMealIcon,
+  CaloriesIcon,
+  CarbsIcon,
+  CloseIcon,
+  CustomFoodIcon,
+  EditIcon,
+  FatIcon,
+  PlusIcon,
+  ProteinIcon,
+  SearchIcon,
+  TargetIcon
 } from '../../components/icons/IconComponents'
 import { ProtectedRoute } from '../../components/ProtectedRoute'
 import { useAuth } from '../../hooks/useAuth'
 import { MainLayout } from '../../layouts/MainLayout'
+import { AIMealSuggestionService } from '../../services/aiMealSuggestionService'
 import { NutritionService } from '../../services/nutritionService'
 import { PlanGenerationService } from '../../services/planGenerationService'
 import { DailyNutritionSummary, FoodItem, FoodSearchResult, MealEntry, NutritionInfo } from '../../types/nutrition'
@@ -65,7 +66,17 @@ export default function Nutrition() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState<{
+    breakfast: boolean
+    lunch: boolean
+    dinner: boolean
+    snack: boolean
+  }>({
+    breakfast: false,
+    lunch: false,
+    dinner: false,
+    snack: false
+  })
   
   // NEW: Search mode state
   const [searchMode, setSearchMode] = useState<'search' | 'custom' | 'create'>('search')
@@ -86,6 +97,30 @@ export default function Nutrition() {
     fiber: '',
     sugar: '',
     sodium: ''
+  })
+
+  // NEW: AI Suggestions state
+  const [aiSuggestions, setAiSuggestions] = useState<{
+    breakfast: FoodSearchResult[]
+    lunch: FoodSearchResult[]
+    dinner: FoodSearchResult[]
+    snack: FoodSearchResult[]
+  }>({
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+    snack: []
+  })
+  const [suggestionsLoading, setSuggestionsLoading] = useState<{
+    breakfast: boolean
+    lunch: boolean
+    dinner: boolean
+    snack: boolean
+  }>({
+    breakfast: false,
+    lunch: false,
+    dinner: false,
+    snack: false
   })
 
   // NEW: Load user custom foods
@@ -182,21 +217,13 @@ export default function Nutrition() {
         router.push('/(auth)/workouts')
         break
       case 'sleep':
-        console.log('🥗 Nutrition: Attempting to navigate to sleep...')
-        console.log('🥗 Nutrition: Current route before navigation')
-        try {
-          router.push('/(auth)/sleep')
-          console.log('🥗 Nutrition: Navigation to sleep initiated')
-        } catch (error) {
-          console.error('🥗 Nutrition: Navigation error:', error)
-          Alert.alert('Navigation Error', 'Failed to navigate to sleep page')
-        }
+        router.push('/(auth)/sleep')
         break
       case 'hydration':
         router.push('/(auth)/hydration')
         break
       case 'settings':
-        Alert.alert('Coming Soon', 'Settings page is under development')
+        router.push('/(auth)/settings')
         break
       default:
         console.log('Unknown route:', route)
@@ -221,7 +248,12 @@ export default function Nutrition() {
     
     try {
       setSearchLoading(true)
-      setShowSuggestions(false)
+      setShowSuggestions({
+        breakfast: false,
+        lunch: false,
+        dinner: false,
+        snack: false
+      })
       
       console.log('🔍 Searching for foods:', queryToSearch)
       
@@ -323,9 +355,19 @@ export default function Nutrition() {
       ].slice(0, 5)
       
       setSearchSuggestions(filteredSuggestions)
-      setShowSuggestions(filteredSuggestions.length > 0)
+      setShowSuggestions({
+        breakfast: filteredSuggestions.length > 0,
+        lunch: filteredSuggestions.length > 0,
+        dinner: filteredSuggestions.length > 0,
+        snack: filteredSuggestions.length > 0
+      })
     } else {
-      setShowSuggestions(false)
+      setShowSuggestions({
+        breakfast: false,
+        lunch: false,
+        dinner: false,
+        snack: false
+      })
     }
   }
 
@@ -340,7 +382,8 @@ export default function Nutrition() {
       meal: searchResult.description,
       servings,
       isMeal: searchResult.isMeal,
-      mealType: selectedMealType
+      mealType: selectedMealType,
+      fdcId: searchResult.fdcId
     })
     
     try {
@@ -351,19 +394,22 @@ export default function Nutrition() {
         const meal = NutritionService.convertSearchResultToMeal(searchResult)
         console.log('🍽️ Converted meal:', meal)
         
+        // FIXED: Clean nutrition data to remove undefined values
+        const cleanNutrition = {
+          calories: meal.nutrition.calories * servings,
+          protein: meal.nutrition.protein * servings,
+          carbs: meal.nutrition.carbs * servings,
+          fat: meal.nutrition.fat * servings,
+          ...(meal.nutrition.fiber !== undefined && { fiber: meal.nutrition.fiber * servings }),
+          ...(meal.nutrition.sodium !== undefined && { sodium: meal.nutrition.sodium * servings })
+        }
+        
         const mealEntry: Omit<MealEntry, 'id' | 'createdAt'> = {
           userId: user.uid,
           meal: meal,
           quantity: servings,
           servings: servings,
-          actualNutrition: {
-            calories: meal.nutrition.calories * servings,
-            protein: meal.nutrition.protein * servings,
-            carbs: meal.nutrition.carbs * servings,
-            fat: meal.nutrition.fat * servings,
-            fiber: meal.nutrition.fiber ? meal.nutrition.fiber * servings : undefined,
-            sodium: meal.nutrition.sodium ? meal.nutrition.sodium * servings : undefined
-          },
+          actualNutrition: cleanNutrition,
           mealType: selectedMealType,
           consumedAt: new Date()
         }
@@ -382,22 +428,66 @@ export default function Nutrition() {
         Alert.alert('Success', `${meal.name} added to ${selectedMealType}!`)
         console.log('✅ Meal addition completed successfully')
       } else {
-        // Handle individual food item (existing functionality)
+        // Handle individual food item
         console.log('🥕 Processing individual food item...')
-        const foodDetails = await NutritionService.getFoodDetails(searchResult.fdcId)
+        
+        let foodDetails: FoodItem
+        
+        // ✅ FIX: Check if this is an AI suggestion fallback food
+        if (searchResult.fdcId.startsWith('fallback_')) {
+          console.log('🤖 Detected AI suggestion fallback, creating food item directly from suggestion data')
+          
+          // Extract nutrition from foodNutrients
+          const calories = searchResult.foodNutrients.find(n => n.nutrientName === 'Energy')?.value || 200
+          const protein = searchResult.foodNutrients.find(n => n.nutrientName === 'Protein')?.value || 10
+          const carbs = searchResult.foodNutrients.find(n => n.nutrientName === 'Carbohydrate')?.value || 20
+          const fat = searchResult.foodNutrients.find(n => n.nutrientName === 'Total fat')?.value || 8
+          
+          // Create food item directly from suggestion data
+          foodDetails = {
+            id: searchResult.fdcId,
+            name: searchResult.description, // ✅ This preserves the correct name!
+            description: searchResult.description,
+            brand: searchResult.brandOwner || 'AI Suggestion',
+            servingSize: searchResult.servingSize,
+            servingUnit: searchResult.servingSizeUnit,
+            nutritionPer100g: {
+              calories,
+              protein,
+              carbs,
+              fat
+            },
+            isCustom: false
+          }
+          
+          console.log('✅ Created food item from AI suggestion:', foodDetails)
+        } else {
+          // Use normal API fetch for real food items
+          foodDetails = await NutritionService.getFoodDetails(searchResult.fdcId)
         
         if (!foodDetails) {
           throw new Error('Unable to get food details')
+          }
         }
         
         const actualNutrition = NutritionService.calculateNutritionForQuantity(foodDetails, servings)
+        
+        // FIXED: Clean nutrition data to remove undefined values
+        const cleanNutrition = {
+          calories: actualNutrition.calories,
+          protein: actualNutrition.protein,
+          carbs: actualNutrition.carbs,
+          fat: actualNutrition.fat,
+          ...(actualNutrition.fiber !== undefined && { fiber: actualNutrition.fiber }),
+          ...(actualNutrition.sodium !== undefined && { sodium: actualNutrition.sodium })
+        }
         
         const mealEntry: Omit<MealEntry, 'id' | 'createdAt'> = {
           userId: user.uid,
           foodItem: foodDetails,
           quantity: servings,
           servings: servings / foodDetails.servingSize,
-          actualNutrition,
+          actualNutrition: cleanNutrition,
           mealType: selectedMealType,
           consumedAt: new Date()
         }
@@ -621,11 +711,16 @@ export default function Nutrition() {
     const meals = dailySummary?.meals.filter(meal => meal.mealType === mealType) || []
     const consumed = meals.length
     const isExceeded = consumed > target
+    const suggestions = aiSuggestions[mealType] || []
+    const isLoadingSuggestions = suggestionsLoading[mealType]
+    const areSuggestionsVisible = showSuggestions[mealType]
     
     console.log(`📊 Rendering ${title} section:`, {
       mealType,
       totalMealsInSummary: dailySummary?.meals.length || 0,
       filteredMeals: meals.length,
+      aiSuggestions: suggestions.length,
+      suggestionsVisible: areSuggestionsVisible,
       meals: meals.map(m => ({ 
         id: m.id, 
         name: m.meal?.name || m.foodItem?.name,
@@ -652,15 +747,70 @@ export default function Nutrition() {
               setShowAddMeal(true)
             }}
           >
-            <PlusIcon size={20} color="#10B981" />
+            <PlusIcon size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
-        
-        {/* Debug info - remove in production */}
-        {__DEV__ && (
-          <Text style={{ fontSize: 10, color: '#666', margin: 5 }}>
-            Debug: {meals.length} meals found for {mealType}
-          </Text>
+
+        {/* NEW: AI Suggestions Toggle */}
+        <TouchableOpacity
+          style={styles.suggestionsToggle}
+          onPress={() => toggleSuggestions(mealType)}
+          disabled={isLoadingSuggestions}
+        >
+          <View style={styles.suggestionsToggleContent}>
+            <Text style={styles.suggestionsToggleText}>
+              🤖 AI Suggestions {areSuggestionsVisible ? '▼' : '▶'}
+            </Text>
+            {isLoadingSuggestions && (
+              <ActivityIndicator size="small" color="#10B981" style={{ marginLeft: 8 }} />
+            )}
+          </View>
+        </TouchableOpacity>
+
+        {/* NEW: AI Suggestions List */}
+        {areSuggestionsVisible && (
+          <View style={styles.suggestionsContainer}>
+            {suggestions.length > 0 ? (
+              suggestions.map((suggestion, index) => {
+                // Extract nutrition info from foodNutrients
+                const calories = suggestion.foodNutrients.find(n => n.nutrientName === 'Energy')?.value || 0
+                const protein = suggestion.foodNutrients.find(n => n.nutrientName === 'Protein')?.value || 0
+                const carbs = suggestion.foodNutrients.find(n => n.nutrientName === 'Carbohydrate')?.value || 0
+                const fat = suggestion.foodNutrients.find(n => n.nutrientName === 'Total fat')?.value || 0
+                
+                return (
+                  <TouchableOpacity
+                    key={`${suggestion.fdcId}-${index}`}
+                    style={styles.suggestionItem}
+                    onPress={() => addAISuggestedMeal(suggestion, mealType)}
+                  >
+                    <View style={styles.suggestionContent}>
+                      <Text style={styles.suggestionName}>{suggestion.description}</Text>
+                      <Text style={styles.suggestionNutrition}>
+                        {Math.round(calories)} cal • {Math.round(protein)}g protein • {Math.round(carbs)}g carbs • {Math.round(fat)}g fat
+                      </Text>
+                      {suggestion.brandOwner && (
+                        <Text style={styles.suggestionBrand}>{suggestion.brandOwner}</Text>
+                      )}
+                    </View>
+                    <View style={styles.suggestionAddButton}>
+                      <Text style={styles.suggestionAddText}>Add</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })
+            ) : (
+              <View style={styles.noSuggestions}>
+                <Text style={styles.noSuggestionsText}>No suggestions available</Text>
+                <TouchableOpacity
+                  style={styles.reloadSuggestionsButton}
+                  onPress={() => loadAISuggestions(mealType)}
+                >
+                  <Text style={styles.reloadSuggestionsText}>Try Again</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         )}
         
         {meals.map((meal) => (
@@ -801,7 +951,7 @@ export default function Nutrition() {
     )
   }
 
-  // Add new function to update meal quantity
+  // Add new function to update meal quantity - FIXED VERSION
   const updateMealQuantity = async (meal: MealEntry, newQuantity: number) => {
     if (!user) {
       console.error('❌ No user found when updating meal quantity')
@@ -820,13 +970,15 @@ export default function Nutrition() {
       
       if (meal.meal) {
         // Handle complete meal - update servings
+        const baseNutrition = meal.meal.nutrition
         updatedNutrition = {
-          calories: meal.meal.nutrition.calories * newQuantity,
-          protein: meal.meal.nutrition.protein * newQuantity,
-          carbs: meal.meal.nutrition.carbs * newQuantity,
-          fat: meal.meal.nutrition.fat * newQuantity,
-          fiber: meal.meal.nutrition.fiber ? meal.meal.nutrition.fiber * newQuantity : undefined,
-          sodium: meal.meal.nutrition.sodium ? meal.meal.nutrition.sodium * newQuantity : undefined
+          calories: baseNutrition.calories * newQuantity,
+          protein: baseNutrition.protein * newQuantity,
+          carbs: baseNutrition.carbs * newQuantity,
+          fat: baseNutrition.fat * newQuantity,
+          // FIXED: Only include fiber and sodium if they exist
+          ...(baseNutrition.fiber !== undefined && { fiber: baseNutrition.fiber * newQuantity }),
+          ...(baseNutrition.sodium !== undefined && { sodium: baseNutrition.sodium * newQuantity })
         }
         
         await NutritionService.updateMealEntry(meal.id, {
@@ -836,7 +988,17 @@ export default function Nutrition() {
         })
       } else if (meal.foodItem) {
         // Handle individual food item - update grams
-        updatedNutrition = NutritionService.calculateNutritionForQuantity(meal.foodItem, newQuantity)
+        const calculatedNutrition = NutritionService.calculateNutritionForQuantity(meal.foodItem, newQuantity)
+        
+        // FIXED: Clean nutrition data to remove undefined values
+        updatedNutrition = {
+          calories: calculatedNutrition.calories,
+          protein: calculatedNutrition.protein,
+          carbs: calculatedNutrition.carbs,
+          fat: calculatedNutrition.fat,
+          ...(calculatedNutrition.fiber !== undefined && { fiber: calculatedNutrition.fiber }),
+          ...(calculatedNutrition.sodium !== undefined && { sodium: calculatedNutrition.sodium })
+        }
         
         await NutritionService.updateMealEntry(meal.id, {
           quantity: newQuantity,
@@ -872,6 +1034,145 @@ export default function Nutrition() {
       setCurrentPlan(plan)
     } catch (error) {
       console.error('❌ Error loading current plan:', error)
+    }
+  }
+
+  // NEW: Load AI suggestions for each meal type
+  const loadAISuggestions = async (mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+    if (!user || aiSuggestions[mealType].length > 0) return
+    
+    try {
+      setSuggestionsLoading(prev => ({ ...prev, [mealType]: true }))
+      console.log(`🤖 Loading AI suggestions for ${mealType}`)
+      
+      // Get user preferences from current plan if available
+      const userPreferences = currentPlan ? {
+        healthGoal: currentPlan.healthGoal,
+        dietaryRestrictions: currentPlan.dietaryRestrictions || [],
+        preferredCuisines: currentPlan.preferredCuisines || []
+      } : undefined
+      
+      const suggestions = await AIMealSuggestionService.generateMealSuggestions(mealType, userPreferences)
+      
+      // Filter out any invalid suggestions and ensure we have nutrition data
+      const validSuggestions = suggestions.filter(suggestion => 
+        suggestion && 
+        suggestion.fdcId && 
+        suggestion.description &&
+        suggestion.foodNutrients &&
+        suggestion.foodNutrients.length > 0
+      )
+      
+      console.log(`✅ Loaded ${validSuggestions.length} AI suggestions for ${mealType}`)
+      setAiSuggestions(prev => ({ ...prev, [mealType]: validSuggestions }))
+      
+    } catch (error) {
+      console.error(`❌ Error loading AI suggestions for ${mealType}:`, error)
+    } finally {
+      setSuggestionsLoading(prev => ({ ...prev, [mealType]: false }))
+    }
+  }
+
+  // NEW: Toggle suggestions visibility
+  const toggleSuggestions = (mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+    const isCurrentlyShown = showSuggestions[mealType]
+    
+    if (!isCurrentlyShown && aiSuggestions[mealType].length === 0) {
+      // Load suggestions if not loaded yet
+      loadAISuggestions(mealType)
+    }
+    
+    setShowSuggestions(prev => ({ ...prev, [mealType]: !isCurrentlyShown }))
+  }
+
+  // NEW: Add AI suggested meal - FIXED VERSION
+  const addAISuggestedMeal = async (suggestion: FoodSearchResult, mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+    if (!user) return
+    
+    try {
+      console.log('🤖 Adding AI suggested meal:', {
+        suggestion: suggestion.description,
+        mealType,
+        userId: user.uid
+      })
+      
+      // Set the meal type first
+      setSelectedMealType(mealType)
+      
+      // Use the exact same logic as handleMealSelection - prompt for quantity
+      if (!suggestion || !suggestion.fdcId || !suggestion.description) {
+        Alert.alert('Error', 'Invalid meal selected')
+        return
+      }
+
+      if (suggestion.isMeal) {
+        // For complete meals, ask for servings (1, 2, etc.)
+        if (Platform.OS === 'web') {
+          const servings = prompt('How many servings?', '1')
+          if (servings && parseFloat(servings) > 0) {
+            await addMealToDaily(suggestion, parseFloat(servings))
+          } else if (servings !== null) {
+            Alert.alert('Error', 'Please enter a valid number of servings')
+          }
+        } else {
+          Alert.prompt(
+            'Servings',
+            `How many servings of ${suggestion.description}?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Add',
+                onPress: async (servings) => {
+                  const qty = parseFloat(servings || '1')
+                  if (qty > 0) {
+                    await addMealToDaily(suggestion, qty)
+                  } else {
+                    Alert.alert('Error', 'Please enter a valid number of servings')
+                  }
+                }
+              }
+            ],
+            'plain-text',
+            '1'
+          )
+        }
+      } else {
+        // For individual food items, ask for grams (existing functionality)
+        if (Platform.OS === 'web') {
+          const quantity = prompt('Enter quantity in grams:', '100')
+          if (quantity && parseFloat(quantity) > 0) {
+            await addMealToDaily(suggestion, parseFloat(quantity))
+          } else if (quantity !== null) {
+            Alert.alert('Error', 'Please enter a valid quantity')
+          }
+        } else {
+          Alert.prompt(
+            'Quantity',
+            'Enter quantity in grams:',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Add',
+                onPress: async (quantity) => {
+                  const qty = parseFloat(quantity || '100')
+                  if (qty > 0) {
+                    await addMealToDaily(suggestion, qty)
+                  } else {
+                    Alert.alert('Error', 'Please enter a valid quantity')
+                  }
+                }
+              }
+            ],
+            'plain-text',
+            '100'
+          )
+        }
+      }
+      
+      console.log('✅ AI suggested meal selection completed')
+    } catch (error) {
+      console.error('❌ Error adding AI suggested meal:', error)
+      Alert.alert('Error', `Failed to add ${suggestion.description}: ${error.message}`)
     }
   }
 
@@ -1138,7 +1439,12 @@ export default function Nutrition() {
                     setShowFoodSearch(false)
                     setSearchQuery('')
                     setSearchResults([])
-                    setShowSuggestions(false)
+                    setShowSuggestions({
+                      breakfast: false,
+                      lunch: false,
+                      dinner: false,
+                      snack: false
+                    })
                   }}
                 >
                   <CloseIcon size={24} color="#6B7280" />
@@ -1207,7 +1513,7 @@ export default function Nutrition() {
                   </View>
 
                   {/* Search Suggestions */}
-                  {showSuggestions && (
+                  {showSuggestions[selectedMealType] && (
                     <View style={styles.suggestionsContainer}>
                       <Text style={styles.suggestionsTitle}>Suggestions</Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -1870,6 +2176,98 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   
+  // NEW: AI Suggestions styles
+  suggestionsToggle: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  suggestionsToggleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  suggestionsToggleText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#10B981',
+  },
+  suggestionsContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  suggestionContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  suggestionName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  suggestionNutrition: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  suggestionBrand: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  suggestionAddButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  suggestionAddText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  noSuggestions: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  noSuggestionsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  reloadSuggestionsButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#10B981',
+    borderRadius: 6,
+  },
+  reloadSuggestionsText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  
   // Meal item styles
   mealItem: {
     backgroundColor: '#F9FAFB',
@@ -2025,6 +2423,341 @@ const styles = StyleSheet.create({
   activeTabText: {
     color: '#FFFFFF',
   },
+  searchContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+  },
+  searchButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchResults: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  
+  // Search suggestions styles (different from AI suggestions)
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  suggestionChip: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  suggestionText: {
+    fontSize: 12,
+    color: '#374151',
+  },
+  
+  // Food result styles
+  foodResult: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  mealResult: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#10B981',
+  },
+  customFoodResult: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+  },
+  foodResultContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  foodResultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  foodName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    flex: 1,
+  },
+  mealBadge: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  mealBadgeText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#059669',
+  },
+  customBadge: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  customBadgeText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#D97706',
+  },
+  foodBrand: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  foodCategory: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginBottom: 2,
+  },
+  servingInfo: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  mealServing: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  addButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  mealAddButton: {
+    backgroundColor: '#059669',
+  },
+  customAddButton: {
+    backgroundColor: '#D97706',
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  
+  // Welcome and empty states
+  welcomeContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  welcomeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  welcomeSubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  noResults: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noResultsText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  noResultsSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  
+  // Custom foods styles
+  customFoodsList: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  emptyCustomFoods: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyCustomFoodsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyCustomFoodsText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  createFirstFoodButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  createFirstFoodButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  customFoodItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
+  },
+  customFoodInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  customFoodName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  customFoodDescription: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  customFoodNutrition: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  customFoodActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  editCustomFoodButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#EBF8FF',
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  addCustomFoodButton: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  addCustomFoodButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  
+  // Custom food form styles
+  customFoodForm: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  formSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+    marginTop: 16,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputGroupSmall: {
+    flex: 1,
+    marginRight: 8,
+  },
+  inputGroupHalf: {
+    flex: 1,
+    marginRight: 8,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  createButton: {
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 40,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  createFoodButton: {
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 40,
+  },
+  createFoodButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   
   // Modal overlay for plan info
   modalOverlay: {
@@ -2033,7 +2766,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   
-  // Plan header styles (from newStyles)
+  // Plan header styles
   planHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

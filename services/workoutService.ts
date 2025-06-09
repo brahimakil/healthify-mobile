@@ -1,14 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDocs,
-    query,
-    Timestamp,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  Timestamp,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { db } from '../utils/firebase';
 import { UserService } from './userService';
@@ -830,51 +830,50 @@ class WorkoutService {
   // Create or update a day's workout plan
   async saveDayWorkoutPlan(userId: string, dayPlan: Omit<DayWorkoutPlan, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<string> {
     try {
-      const planData: Omit<DayWorkoutPlan, 'id'> = {
-        ...dayPlan,
-        userId,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      console.log('💾 Saving day plan:', { 
+        dayOfWeek: dayPlan.dayOfWeek,
+        exerciseCount: dayPlan.exercises?.length || 0
+      })
 
-      // Clean the data to remove any undefined values
-      const cleanedPlanData = this.cleanDataForFirestore(planData);
-
-      // Check if plan exists for this day
       const existingQuery = query(
         collection(db, this.WORKOUT_PLANS_COLLECTION),
         where('userId', '==', userId),
         where('dayOfWeek', '==', dayPlan.dayOfWeek)
-      );
+      )
 
-      const existingDocs = await getDocs(existingQuery);
+      const existingDocs = await getDocs(existingQuery)
       
       if (!existingDocs.empty) {
         // Update existing plan
-        const docRef = existingDocs.docs[0].ref;
-        const updateData = this.cleanDataForFirestore({
-          ...cleanedPlanData,
-          updatedAt: Timestamp.fromDate(new Date())
-        });
+        const docRef = existingDocs.docs[0].ref
+        const existingData = existingDocs.docs[0].data()
         
-        await updateDoc(docRef, updateData);
-        console.log(`✅ Updated ${dayPlan.dayOfWeek} workout plan`);
-        return existingDocs.docs[0].id;
+        const updateData = this.cleanDataForFirestore({
+          ...dayPlan,
+          userId,
+          createdAt: existingData.createdAt || Timestamp.fromDate(new Date()),
+          updatedAt: Timestamp.fromDate(new Date())
+        })
+        
+        await updateDoc(docRef, updateData)
+        console.log(`✅ Updated ${dayPlan.dayOfWeek} workout plan`)
+        return existingDocs.docs[0].id
       } else {
         // Create new plan
         const createData = this.cleanDataForFirestore({
-          ...cleanedPlanData,
+          ...dayPlan,
+          userId,
           createdAt: Timestamp.fromDate(new Date()),
           updatedAt: Timestamp.fromDate(new Date())
-        });
+        })
         
-        const docRef = await addDoc(collection(db, this.WORKOUT_PLANS_COLLECTION), createData);
-        console.log(`✅ Created ${dayPlan.dayOfWeek} workout plan`);
-        return docRef.id;
+        const docRef = await addDoc(collection(db, this.WORKOUT_PLANS_COLLECTION), createData)
+        console.log(`✅ Created ${dayPlan.dayOfWeek} workout plan`)
+        return docRef.id
       }
     } catch (error) {
-      console.error('❌ Error saving day workout plan:', error);
-      throw error;
+      console.error('❌ Error saving day workout plan:', error)
+      throw error
     }
   }
 
@@ -1015,25 +1014,87 @@ class WorkoutService {
   // Remove exercise from day plan
   async removeExerciseFromDayPlan(userId: string, dayOfWeek: string, exerciseIndex: number): Promise<void> {
     try {
-      const dayPlan = await this.getDayWorkoutPlan(userId, dayOfWeek);
+      console.log('🗑️ removeExerciseFromDayPlan called:', { userId, dayOfWeek, exerciseIndex })
       
-      if (!dayPlan || !dayPlan.exercises[exerciseIndex]) {
-        throw new Error('Exercise not found');
+      console.log('📞 About to call getDayWorkoutPlan...')
+      const dayPlan = await this.getDayWorkoutPlan(userId, dayOfWeek)
+      console.log('📋 getDayWorkoutPlan result:', {
+        hasPlan: !!dayPlan,
+        planId: dayPlan?.id,
+        exerciseCount: dayPlan?.exercises?.length || 0,
+        exercises: dayPlan?.exercises?.map((ex, idx) => ({ idx, name: ex.exerciseName, id: ex.exerciseId }))
+      })
+      
+      if (!dayPlan) {
+        console.error('❌ No day plan found')
+        throw new Error(`No workout plan found for ${dayOfWeek}`)
+      }
+      
+      if (!dayPlan.exercises || dayPlan.exercises.length === 0) {
+        console.error('❌ No exercises in day plan')
+        throw new Error('No exercises found in the day plan')
+      }
+      
+      if (exerciseIndex < 0 || exerciseIndex >= dayPlan.exercises.length) {
+        console.error('❌ Invalid exercise index:', { 
+          exerciseIndex, 
+          exerciseCount: dayPlan.exercises.length,
+          validRange: `0-${dayPlan.exercises.length - 1}`
+        })
+        throw new Error(`Exercise index ${exerciseIndex} is out of range (0-${dayPlan.exercises.length - 1})`)
       }
 
-      const removedExercise = dayPlan.exercises[exerciseIndex];
-      dayPlan.exercises.splice(exerciseIndex, 1);
+      const removedExercise = dayPlan.exercises[exerciseIndex]
+      console.log('🎯 About to remove exercise:', {
+        index: exerciseIndex,
+        name: removedExercise.exerciseName,
+        id: removedExercise.exerciseId,
+        sets: removedExercise.sets,
+        restTime: removedExercise.restTime
+      })
 
-      // Recalculate estimated duration
-      const exerciseDuration = removedExercise.sets * (2 + (removedExercise.restTime || 60) / 60);
-      dayPlan.estimatedDuration -= exerciseDuration;
-      dayPlan.estimatedDuration = Math.max(0, dayPlan.estimatedDuration);
+      // Remove the exercise from the array
+      console.log('✂️ Removing exercise from array...')
+      dayPlan.exercises.splice(exerciseIndex, 1)
+      console.log('✂️ Exercise removed from array, remaining:', dayPlan.exercises.length)
 
-      await this.saveDayWorkoutPlan(userId, dayPlan);
-      console.log(`✅ Removed ${removedExercise.exerciseName} from ${dayOfWeek} plan`);
+      // Recalculate duration
+      console.log('⏱️ Recalculating duration...')
+      const exerciseDuration = removedExercise.sets * (2 + (removedExercise.restTime || 60) / 60)
+      const oldDuration = dayPlan.estimatedDuration
+      dayPlan.estimatedDuration = Math.max(0, dayPlan.estimatedDuration - exerciseDuration)
+      console.log('⏱️ Duration updated:', {
+        removedDuration: exerciseDuration,
+        oldDuration,
+        newDuration: dayPlan.estimatedDuration
+      })
+
+      // Create the plan data to save
+      const planToSave = {
+        dayOfWeek: dayPlan.dayOfWeek,
+        planName: dayPlan.planName,
+        exercises: dayPlan.exercises,
+        targetMuscleGroups: dayPlan.targetMuscleGroups,
+        estimatedDuration: dayPlan.estimatedDuration
+      }
+      
+      console.log('💾 About to save updated plan:', {
+        dayOfWeek: planToSave.dayOfWeek,
+        exerciseCount: planToSave.exercises.length,
+        estimatedDuration: planToSave.estimatedDuration
+      })
+      
+      await this.saveDayWorkoutPlan(userId, planToSave)
+      console.log(`✅ Successfully removed "${removedExercise.exerciseName}" from ${dayOfWeek} plan`)
+      
     } catch (error) {
-      console.error('❌ Error removing exercise from day plan:', error);
-      throw error;
+      console.error('❌ Error removing exercise from day plan:', error)
+      console.error('❌ Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name
+      })
+      throw error
     }
   }
 

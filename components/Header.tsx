@@ -1,3 +1,4 @@
+import { useTheme } from '@/context/ThemeContext'
 import { router } from 'expo-router'
 import React, { useState } from 'react'
 import { Modal, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const insets = useSafeAreaInsets()
   const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const { theme } = useTheme()
 
   const handleProfilePress = () => {
     setShowProfileMenu(true)
@@ -44,28 +46,41 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar 
+        barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} 
+        backgroundColor={theme.mode === 'dark' ? '#1F2937' : '#ffffff'} 
+      />
+      <View style={[
+        styles.container, 
+        { 
+          paddingTop: insets.top, 
+          backgroundColor: theme.mode === 'dark' ? '#1F2937' : '#ffffff',
+          borderBottomColor: theme.mode === 'dark' ? '#374151' : '#F3F4F6'
+        }
+      ]}>
         <View style={styles.content}>
           <TouchableOpacity 
-            style={styles.menuButton} 
+            style={[
+              styles.menuButton,
+              { backgroundColor: theme.mode === 'dark' ? '#374151' : '#F9FAFB' }
+            ]} 
             onPress={onMenuPress}
             activeOpacity={0.7}
           >
-            <MenuIcon size={24} color="#1F2937" />
+            <MenuIcon size={24} color={theme.mode === 'dark' ? '#ffffff' : '#1F2937'} />
           </TouchableOpacity>
           
           <View style={styles.titleContainer}>
-            <Text style={styles.title} numberOfLines={1}>{title}</Text>
+            <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>{title}</Text>
           </View>
           
           <View style={styles.rightSection}>
             <TouchableOpacity 
-              style={styles.avatar} 
+              style={[styles.avatar, { backgroundColor: theme.mode === 'dark' ? '#374151' : '#F3F4F6' }]} 
               activeOpacity={0.8}
               onPress={handleProfilePress}
             >
-              <Text style={styles.avatarText}>
+              <Text style={[styles.avatarText, { color: theme.text }]}>
                 {userName.charAt(0).toUpperCase()}
               </Text>
             </TouchableOpacity>
@@ -73,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({
         </View>
       </View>
 
-      {/* Profile Menu Modal */}
+      {/* Profile Menu Modal with theme */}
       <Modal
         visible={showProfileMenu}
         transparent={true}
@@ -81,31 +96,49 @@ export const Header: React.FC<HeaderProps> = ({
         onRequestClose={handleProfileMenuClose}
       >
         <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
+          style={styles.modalOverlay} 
+          activeOpacity={1} 
           onPress={handleProfileMenuClose}
         >
-          <View style={styles.profileMenu}>
-            <View style={styles.profileHeader}>
+          <View style={[
+            styles.profileMenu, 
+            { 
+              backgroundColor: theme.background,
+              shadowColor: theme.mode === 'dark' ? '#000' : '#000'
+            }
+          ]}>
+            <View style={[
+              styles.profileHeader,
+              { borderBottomColor: theme.mode === 'dark' ? '#374151' : '#F3F4F6' }
+            ]}>
               <View style={styles.profileAvatar}>
                 <Text style={styles.profileAvatarText}>
                   {userName.charAt(0).toUpperCase()}
                 </Text>
               </View>
               <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>{userName}</Text>
-                {userEmail && <Text style={styles.profileEmail}>{userEmail}</Text>}
+                <Text style={[styles.profileName, { color: theme.text }]}>{userName}</Text>
+                {userEmail && <Text style={[
+                  styles.profileEmail, 
+                  { color: theme.mode === 'dark' ? '#9CA3AF' : '#6B7280' }
+                ]}>{userEmail}</Text>}
               </View>
             </View>
             
-            <View style={styles.menuDivider} />
+            <View style={[
+              styles.menuDivider, 
+              { backgroundColor: theme.mode === 'dark' ? '#374151' : '#F3F4F6' }
+            ]} />
             
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={handleProfileView}
             >
-              <UserIcon size={20} color="#6B7280" />
-              <Text style={styles.menuItemText}>View Profile</Text>
+              <UserIcon size={20} color={theme.mode === 'dark' ? '#9CA3AF' : '#6B7280'} />
+              <Text style={[
+                styles.menuItemText, 
+                { color: theme.text }
+              ]}>View Profile</Text>
             </TouchableOpacity>
             
             <TouchableOpacity 

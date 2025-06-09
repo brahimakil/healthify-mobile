@@ -1,27 +1,27 @@
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native'
 import {
-    CalendarIcon,
-    CloseIcon,
-    DeleteIcon,
-    DropletIcon,
-    EditIcon,
-    PlusIcon,
-    TargetIcon,
-    WaterIcon
+  CalendarIcon,
+  CloseIcon,
+  DeleteIcon,
+  DropletIcon,
+  EditIcon,
+  PlusIcon,
+  TargetIcon,
+  WaterIcon
 } from '../../components/icons/IconComponents'
 import { ProtectedRoute } from '../../components/ProtectedRoute'
 import { useAuth } from '../../hooks/useAuth'
@@ -148,7 +148,7 @@ export default function Hydration() {
         router.push('/(auth)/sleep')
         break
       case 'settings':
-        Alert.alert('Coming Soon', 'Settings page is under development')
+        router.push('/(auth)/settings')
         break
       default:
         console.log('Unknown route:', route)
