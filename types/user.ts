@@ -24,6 +24,9 @@ export interface User {
     dailyWaterTarget?: number // in ml
     sleepDurationTarget?: number // in hours
     weeklyWorkoutTarget?: number
+    
+    // AI Configuration
+    googleApiKey?: string // Google Gemini API key for AI features
   }
 }
 

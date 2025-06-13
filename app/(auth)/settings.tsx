@@ -1,7 +1,7 @@
 import { useTheme } from '@/context/ThemeContext'
 import { useAuth } from '@/hooks/useAuth'
 import { MainLayout } from '@/layouts/MainLayout'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import { UserService } from '@/services/userService'
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native'
@@ -11,20 +11,41 @@ export default function SettingsScreen() {
   const { theme, toggleTheme } = useTheme()
   const [googleApiKey, setGoogleApiKey] = useState('')
   const [isApiKeyVisible, setIsApiKeyVisible] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   // Load saved API key on component mount
   useEffect(() => {
-    loadApiKey()
-  }, [])
+    if (user?.uid) {
+      loadApiKey()
+    }
+  }, [user?.uid])
 
   const loadApiKey = async () => {
     try {
-      const savedApiKey = await AsyncStorage.getItem('google_api_key')
-      if (savedApiKey) {
-        setGoogleApiKey(savedApiKey)
+      setLoading(true)
+      console.log('🔑 Loading API key for user:', user?.uid)
+      
+      if (user?.uid) {
+        const userData = await UserService.getUser(user.uid)
+        console.log('👤 User data loaded:', {
+          hasProfile: !!userData?.profile,
+          hasApiKey: !!userData?.profile?.googleApiKey,
+          apiKeyLength: userData?.profile?.googleApiKey?.length || 0
+        })
+        
+        if (userData?.profile?.googleApiKey) {
+          setGoogleApiKey(userData.profile.googleApiKey)
+          console.log('✅ API key loaded from profile')
+        } else {
+          console.log('⚠️ No API key found in profile')
+          setGoogleApiKey('')
+        }
       }
     } catch (error) {
-      console.error('Error loading API key:', error)
+      console.error('❌ Error loading API key:', error)
+      showAlert('Error', 'Failed to load API key from profile')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -38,16 +59,48 @@ export default function SettingsScreen() {
 
   const saveApiKey = async () => {
     try {
-      if (googleApiKey.trim()) {
-        await AsyncStorage.setItem('google_api_key', googleApiKey.trim())
-        showAlert('Success', 'Google API key saved successfully')
-      } else {
-        await AsyncStorage.removeItem('google_api_key')
-        showAlert('Success', 'Google API key removed')
+      if (!user?.uid) {
+        showAlert('Error', 'User not authenticated')
+        return
       }
+
+      setLoading(true)
+      console.log('💾 Saving API key...', {
+        userId: user.uid,
+        hasApiKey: !!googleApiKey.trim(),
+        apiKeyLength: googleApiKey.trim().length
+      })
+
+      if (googleApiKey.trim()) {
+        // Save API key to user profile
+        await UserService.updateUserProfile(user.uid, {
+          googleApiKey: googleApiKey.trim()
+        })
+        console.log('✅ API key saved to profile')
+        showAlert('Success', 'Google API key saved to your profile successfully')
+      } else {
+        // Remove API key from user profile by setting it to null
+        const currentUser = await UserService.getUser(user.uid)
+        if (currentUser?.profile) {
+          const updatedProfile = { ...currentUser.profile }
+          delete updatedProfile.googleApiKey
+          
+          await UserService.updateUserProfile(user.uid, updatedProfile)
+          console.log('✅ API key removed from profile')
+          showAlert('Success', 'Google API key removed from your profile')
+        }
+      }
+
+      // Reload the API key to verify it was saved
+      setTimeout(() => {
+        loadApiKey()
+      }, 1000)
+
     } catch (error) {
-      console.error('Error saving API key:', error)
-      showAlert('Error', 'Failed to save API key')
+      console.error('❌ Error saving API key:', error)
+      showAlert('Error', 'Failed to save API key to your profile')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -58,7 +111,8 @@ export default function SettingsScreen() {
     }
 
     try {
-      console.log('Testing API key...')
+      setLoading(true)
+      console.log('🧪 Testing API key...')
       
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${googleApiKey.trim()}`
       
@@ -78,7 +132,7 @@ export default function SettingsScreen() {
         }
       }
 
-      console.log('Making API request to:', apiUrl.replace(googleApiKey.trim(), 'HIDDEN_KEY'))
+      console.log('📡 Making API request...')
       
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -88,16 +142,15 @@ export default function SettingsScreen() {
         body: JSON.stringify(requestBody)
       })
 
-      console.log('Response status:', response.status)
-      console.log('Response headers:', response.headers)
+      console.log('📡 Response status:', response.status)
 
       const responseText = await response.text()
-      console.log('Response text:', responseText)
+      console.log('📡 Response text:', responseText)
 
       if (response.ok) {
         try {
           const data = JSON.parse(responseText)
-          console.log('Parsed response:', data)
+          console.log('✅ Parsed response:', data)
           
           if (data.candidates && data.candidates[0] && data.candidates[0].content) {
             const generatedText = data.candidates[0].content.parts[0].text
@@ -124,11 +177,11 @@ export default function SettingsScreen() {
           // Use default error message
         }
         
-        console.error('API Error:', errorMessage)
+        console.error('❌ API Error:', errorMessage)
         showAlert('Error ❌', `API Test Failed:\n${errorMessage}`)
       }
     } catch (error) {
-      console.error('Network/API test error:', error)
+      console.error('❌ Network/API test error:', error)
       
       let errorMessage = 'Failed to test API key'
       if (error instanceof Error) {
@@ -139,12 +192,12 @@ export default function SettingsScreen() {
         'Error ❌', 
         `Network error occurred:\n${errorMessage}\n\nPlease check your internet connection and try again.`
       )
+    } finally {
+      setLoading(false)
     }
   }
 
   const handleNavigate = (route: string) => {
-    console.log('Navigating to:', route)
-    
     switch (route) {
       case 'dashboard':
         router.push('/(auth)/dashboard')
@@ -161,23 +214,19 @@ export default function SettingsScreen() {
       case 'hydration':
         router.push('/(auth)/hydration')
         break
-      case 'settings':
-        // Already on settings page
+      case 'profile':
+        router.push('/(auth)/profile')
         break
       default:
-        console.log('Unknown route:', route)
-        showAlert('Navigation Error', `Route "${route}" not found`)
+        router.push('/(auth)/dashboard')
     }
   }
 
   const handleLogout = async () => {
     try {
-      console.log('🔄 Logging out...')
       await logout()
-      console.log('✅ Logout successful')
     } catch (error) {
-      console.error('❌ Logout error:', error)
-      showAlert('Error', 'Failed to logout')
+      showAlert('Error', 'Failed to sign out. Please try again.')
     }
   }
 
@@ -187,16 +236,12 @@ export default function SettingsScreen() {
       activeRoute="settings"
       onNavigate={handleNavigate}
       onLogout={handleLogout}
-      user={{
-        name: user?.displayName || 'User',
-        email: user?.email || '',
-        photoURL: user?.photoURL || undefined
-      }}
+      user={user}
     >
-      <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
-          {/* Theme Settings Section */}
-          <View style={[styles.section, { borderBottomColor: theme.mode === 'dark' ? '#374151' : '#E5E7EB' }]}>
+          {/* Theme Section */}
+          <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Appearance</Text>
             
             <View style={styles.settingItem}>
@@ -209,21 +254,21 @@ export default function SettingsScreen() {
               <Switch
                 value={theme.mode === 'dark'}
                 onValueChange={toggleTheme}
-                trackColor={{ false: '#E5E7EB', true: '#10B981' }}
-                thumbColor={theme.mode === 'dark' ? '#FFFFFF' : '#F9FAFB'}
+                trackColor={{ false: '#D1D5DB', true: '#10B981' }}
+                thumbColor={theme.mode === 'dark' ? '#FFFFFF' : '#F3F4F6'}
               />
             </View>
           </View>
 
           {/* API Management Section */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>API Management</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>AI Configuration</Text>
             
             <View style={styles.settingItem}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.text }]}>Google API Key</Text>
                 <Text style={[styles.settingDescription, { color: theme.mode === 'dark' ? '#D1D5DB' : '#6B7280' }]}>
-                  Enter your Google Gemini API key for AI features
+                  Enter your Google Gemini API key for AI-powered features
                 </Text>
               </View>
             </View>
@@ -246,12 +291,14 @@ export default function SettingsScreen() {
                 multiline={false}
                 autoCapitalize="none"
                 autoCorrect={false}
+                editable={!loading}
               />
               
-              <View style={styles.apiKeyActions}>
+              <View style={styles.buttonRow}>
                 <TouchableOpacity
                   style={[styles.actionButton, styles.toggleButton, { backgroundColor: theme.mode === 'dark' ? '#4B5563' : '#E5E7EB' }]}
                   onPress={() => setIsApiKeyVisible(!isApiKeyVisible)}
+                  disabled={loading}
                 >
                   <Text style={[styles.actionButtonText, { color: theme.text }]}>
                     {isApiKeyVisible ? 'Hide' : 'Show'}
@@ -259,30 +306,39 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.testButton]}
+                  style={[styles.actionButton, styles.testButton, { opacity: loading ? 0.5 : 1 }]}
                   onPress={testApiKey}
+                  disabled={loading}
                 >
-                  <Text style={styles.testButtonText}>Test</Text>
+                  <Text style={styles.testButtonText}>
+                    {loading ? 'Testing...' : 'Test'}
+                  </Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.saveButton]}
+                  style={[styles.actionButton, styles.saveButton, { opacity: loading ? 0.5 : 1 }]}
                   onPress={saveApiKey}
+                  disabled={loading}
                 >
-                  <Text style={styles.saveButtonText}>Save</Text>
+                  <Text style={styles.saveButtonText}>
+                    {loading ? 'Saving...' : 'Save'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.apiKeyInfo}>
               <Text style={[styles.infoText, { color: theme.mode === 'dark' ? '#9CA3AF' : '#6B7280' }]}>
-                • Get your API key from Google AI Studio
+                • Get your API key from Google AI Studio (aistudio.google.com)
               </Text>
               <Text style={[styles.infoText, { color: theme.mode === 'dark' ? '#9CA3AF' : '#6B7280' }]}>
-                • Your API key is stored securely on your device
+                • Your API key is stored securely in your profile
               </Text>
               <Text style={[styles.infoText, { color: theme.mode === 'dark' ? '#9CA3AF' : '#6B7280' }]}>
-                • Required for AI-powered health insights
+                • Required for AI-powered workout and nutrition suggestions
+              </Text>
+              <Text style={[styles.infoText, { color: theme.mode === 'dark' ? '#9CA3AF' : '#6B7280' }]}>
+                • Current status: {googleApiKey.trim() ? '✅ API key configured' : '❌ No API key set'}
               </Text>
             </View>
           </View>
@@ -301,20 +357,17 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 32,
-    borderBottomWidth: 1,
-    paddingBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     marginBottom: 16,
   },
   settingItem: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 12,
-    minHeight: 60,
   },
   settingInfo: {
     flex: 1,
@@ -329,10 +382,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  chevron: {
-    fontSize: 20,
-    fontWeight: '300',
-  },
   apiKeyContainer: {
     marginTop: 12,
   },
@@ -341,31 +390,28 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     fontSize: 14,
+    fontFamily: 'monospace',
     marginBottom: 12,
-    minHeight: 44,
   },
-  apiKeyActions: {
+  buttonRow: {
     flexDirection: 'row',
     gap: 8,
   },
   actionButton: {
+    flex: 1,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    paddingVertical: 8,
     borderRadius: 6,
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 36,
   },
   toggleButton: {
-    flex: 1,
+    // backgroundColor set dynamically
   },
   testButton: {
     backgroundColor: '#3B82F6',
-    flex: 1,
   },
   saveButton: {
     backgroundColor: '#10B981',
-    flex: 1,
   },
   actionButtonText: {
     fontSize: 14,
@@ -383,9 +429,9 @@ const styles = StyleSheet.create({
   },
   apiKeyInfo: {
     marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    padding: 12,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 8,
   },
   infoText: {
     fontSize: 12,

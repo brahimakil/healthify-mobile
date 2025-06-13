@@ -1052,7 +1052,12 @@ export default function Nutrition() {
         preferredCuisines: currentPlan.preferredCuisines || []
       } : undefined
       
-      const suggestions = await AIMealSuggestionService.generateMealSuggestions(mealType, userPreferences)
+      // Pass userId to the AI service
+      const suggestions = await AIMealSuggestionService.generateMealSuggestions(
+        mealType,
+        user.uid, // Pass the user ID
+        userPreferences
+      )
       
       // Filter out any invalid suggestions and ensure we have nutrition data
       const validSuggestions = suggestions.filter(suggestion => 

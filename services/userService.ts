@@ -1,10 +1,10 @@
 import {
-    collection,
-    doc,
-    getDoc,
-    serverTimestamp,
-    setDoc,
-    updateDoc
+  collection,
+  doc,
+  getDoc,
+  serverTimestamp,
+  setDoc,
+  updateDoc
 } from 'firebase/firestore'
 import { User, UserDocument } from '../types/user'
 import { db } from '../utils/firebase'
@@ -24,6 +24,14 @@ export class UserService {
       weeklyWorkoutTarget: 3,
     }
 
+    // Clean profile data to remove undefined values
+    const cleanProfile = userData.profile ? Object.fromEntries(
+      Object.entries(userData.profile).filter(([_, v]) => v !== undefined)
+    ) : {};
+
+    // Explicitly remove userId from profile
+    delete cleanProfile.userId;
+
     const userDoc: UserDocument = {
       email: userData.email || '',
       displayName: userData.displayName || '',
@@ -33,7 +41,7 @@ export class UserService {
       updatedAt: new Date(),
       profile: {
         ...defaultProfile,
-        ...userData.profile,
+        ...cleanProfile,
       }
     }
 

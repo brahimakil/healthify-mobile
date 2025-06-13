@@ -1,16 +1,16 @@
 import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native'
 import { useAuth } from '../hooks/useAuth'
 
@@ -40,6 +40,43 @@ export default function Register() {
   const [showActivityPicker, setShowActivityPicker] = useState(false)
   const [showGoalsPicker, setShowGoalsPicker] = useState(false)
   const { register } = useAuth()
+  
+  // Reference for web date picker
+  const webDatePickerRef = useRef<HTMLInputElement | null>(null)
+
+  // Create web date picker element on mount
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      // Create the date input element
+      const dateInput = document.createElement('input')
+      dateInput.type = 'date'
+      dateInput.style.display = 'none'
+      dateInput.style.position = 'absolute'
+      dateInput.style.opacity = '0'
+      dateInput.style.height = '0'
+      dateInput.style.width = '0'
+      dateInput.value = formData.dateOfBirth.toISOString().split('T')[0]
+      
+      // Add change event listener
+      dateInput.addEventListener('change', (e) => {
+        const target = e.target as HTMLInputElement
+        if (target.value) {
+          updateField('dateOfBirth', new Date(target.value))
+        }
+      })
+      
+      // Add to the DOM
+      document.body.appendChild(dateInput)
+      webDatePickerRef.current = dateInput
+      
+      // Cleanup on unmount
+      return () => {
+        if (webDatePickerRef.current) {
+          document.body.removeChild(webDatePickerRef.current)
+        }
+      }
+    }
+  }, [])
 
   // Simplified gender options
   const genderOptions = ['Male', 'Female']
@@ -53,6 +90,11 @@ export default function Register() {
 
   const updateField = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    
+    // Update web date picker value if it exists and the field is dateOfBirth
+    if (field === 'dateOfBirth' && Platform.OS === 'web' && webDatePickerRef.current) {
+      webDatePickerRef.current.value = value.toISOString().split('T')[0]
+    }
   }
 
   const calculateAge = (birthDate: Date) => {
@@ -83,6 +125,13 @@ export default function Register() {
     setShowDatePicker(false)
     if (selectedDate) {
       updateField('dateOfBirth', selectedDate)
+    }
+  }
+
+  // Handle web date input change
+  const handleWebDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value) {
+      updateField('dateOfBirth', new Date(e.target.value))
     }
   }
 
@@ -216,7 +265,14 @@ export default function Register() {
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
+      <TouchableOpacity 
+        style={styles.backButton} 
+        onPress={() => router.back()}
+      >
+        <Text style={styles.backButtonText}>← Back</Text>
+      </TouchableOpacity>
+      
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={styles.title}>Join Healthify</Text>
@@ -297,60 +353,49 @@ export default function Register() {
           {/* Date of Birth with Calendar Picker */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Date of Birth</Text>
-            <TouchableOpacity 
-              style={styles.input} 
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={styles.inputText}>
-                {formatDate(formData.dateOfBirth)} (Age: {calculateAge(formData.dateOfBirth)})
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* THE DATE PICKER IS HERE! */}
-          {showDatePicker && (
-            Platform.OS === 'web' ? (
-              <View style={styles.webDatePickerContainer}>
-                <Text style={styles.webDatePickerLabel}>Select Date of Birth:</Text>
+            {Platform.OS === 'web' ? (
+              // For web, use a direct date input
+              <View style={styles.input}>
                 <input
                   type="date"
                   value={formData.dateOfBirth.toISOString().split('T')[0]}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      const selectedDate = new Date(e.target.value)
-                      updateField('dateOfBirth', selectedDate)
-                    }
-                    setShowDatePicker(false)
-                  }}
-                  max={new Date().toISOString().split('T')[0]}
-                  min="1900-01-01"
+                  onChange={handleWebDateChange}
                   style={{
-                    padding: 12,
-                    borderRadius: 8,
-                    border: '1px solid #ccc',
-                    fontSize: 16,
-                    marginBottom: 16,
-                    width: '100%'
+                    border: 'none',
+                    backgroundColor: 'transparent',
+                    fontSize: '16px',
+                    color: '#1F2937',
+                    width: '100%',
+                    outline: 'none',
+                    padding: '0',
+                    fontFamily: 'inherit'
                   }}
                 />
-                <TouchableOpacity 
-                  style={styles.cancelButton} 
-                  onPress={() => setShowDatePicker(false)}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
               </View>
             ) : (
-              DateTimePicker && (
-                <DateTimePicker
-                  value={formData.dateOfBirth}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleDateChange}
-                  maximumDate={new Date()}
-                  minimumDate={new Date(1900, 0, 1)}
-                />
-              )
+              // For native, use TouchableOpacity to trigger DateTimePicker
+              <TouchableOpacity 
+                style={styles.input} 
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={styles.inputText}>
+                  {formatDate(formData.dateOfBirth)}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* DateTimePicker for native platforms */}
+          {Platform.OS !== 'web' && showDatePicker && (
+            DateTimePicker && (
+              <DateTimePicker
+                value={formData.dateOfBirth}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={handleDateChange}
+                maximumDate={new Date()}
+                minimumDate={new Date(1900, 0, 1)}
+              />
             )
           )}
           
@@ -434,13 +479,6 @@ export default function Register() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
-
         {/* Picker Modals */}
         <PickerModal
           visible={showGenderPicker}
@@ -473,7 +511,7 @@ export default function Register() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#10B981',
+    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
@@ -485,22 +523,21 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   title: {
-    color: '#fff',
+    color: '#0F766E',
     fontSize: 32,
     fontWeight: '700',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#fff',
+    color: '#334155',
     fontSize: 16,
-    opacity: 0.9,
     textAlign: 'center',
   },
   form: {
     marginBottom: 24,
   },
   sectionTitle: {
-    color: '#fff',
+    color: '#0F766E',
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 16,
@@ -517,19 +554,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   label: {
-    color: '#fff',
+    color: '#334155',
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 6,
   },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 10,
     fontSize: 16,
     color: '#1F2937',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   inputText: {
     fontSize: 16,
@@ -539,7 +578,7 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   button: {
-    backgroundColor: '#fff',
+    backgroundColor: '#0F766E',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -549,7 +588,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   buttonText: {
-    color: '#10B981',
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
@@ -560,22 +599,22 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   footerText: {
-    color: '#fff',
+    color: '#64748B',
     fontSize: 16,
   },
   linkText: {
-    color: '#fff',
+    color: '#0F766E',
     fontSize: 16,
     fontWeight: '700',
-    textDecorationLine: 'underline',
   },
   backButton: {
     position: 'absolute',
     top: 60,
     left: 24,
+    zIndex: 10,
   },
   backButtonText: {
-    color: '#fff',
+    color: '#0F766E',
     fontSize: 16,
     fontWeight: '600',
   },

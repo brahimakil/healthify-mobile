@@ -38,7 +38,7 @@ export class AIWorkoutSuggestionService {
       console.log('📊 Weekly analysis complete:', weeklyAnalysis)
 
       // Try AI-powered suggestions first
-      let suggestion = await this.tryAISuggestion(tomorrowDay, weeklyAnalysis, userPreferences)
+      let suggestion = await this.tryAISuggestion(userId, tomorrowDay, weeklyAnalysis, userPreferences)
       
       if (suggestion) {
         console.log('🤖 AI suggestion generated successfully')
@@ -64,19 +64,23 @@ export class AIWorkoutSuggestionService {
   }
 
   private static async tryAISuggestion(
+    userId: string,
     dayOfWeek: string,
     weeklyAnalysis: any,
     userPreferences?: any
   ): Promise<WorkoutSuggestion | null> {
     try {
-      // Get Google API key
-      const apiKey = await AsyncStorage.getItem('google_api_key')
+      // Get user's API key from their profile
+      const { UserService } = await import('./userService')
+      const user = await UserService.getUser(userId)
+      const apiKey = user?.profile?.googleApiKey
+      
       if (!apiKey) {
-        console.log('⚠️ No Google API key found')
+        console.log('⚠️ No Google API key found in user profile')
         return null
       }
 
-      console.log('🤖 Calling Google AI API...')
+      console.log('🤖 Calling Google AI API with user\'s API key...')
       const aiResult = await this.callGoogleAI(dayOfWeek, weeklyAnalysis, apiKey, userPreferences)
       
       if (!aiResult) {
@@ -105,93 +109,151 @@ export class AIWorkoutSuggestionService {
   ): Promise<{ focus: string[], reasoning: string } | null> {
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`
     
+    // Define ONLY the body parts that exist in our exercise API
+    const validBodyParts = [
+      'chest',      // Available in API
+      'back',       // Available in API  
+      'upper arms', // Available in API (for arms/biceps/triceps)
+      'lower legs', // Available in API (for legs/quads/hamstrings)
+      'waist',      // Available in API (for core/abs)
+      'cardio'      // Available in fallback exercises
+    ]
+    
     let context = `You are a professional fitness trainer AI. Analyze the user's weekly training and suggest what they should train tomorrow (${dayOfWeek}).
 
+IMPORTANT: You can ONLY suggest focus areas from this exact list:
+- chest
+- back  
+- upper arms (for biceps, triceps, arm training)
+- lower legs (for quadriceps, hamstrings, leg training)
+- waist (for core, abs, abdominal training)
+- cardio
+
+DO NOT suggest any other body parts like "shoulders", "legs", "arms", "core", "abs" etc. Use ONLY the exact terms listed above.
+
 WEEKLY ANALYSIS:
-- Days worked out: ${weeklyAnalysis.completedDays.join(', ') || 'None this week'}
-- Muscle groups trained: ${weeklyAnalysis.trainedMuscleGroups.join(', ') || 'None this week'}
-- Total workouts completed: ${weeklyAnalysis.totalWorkouts}
-- Rest days taken: ${weeklyAnalysis.restDays}
-- Last workout day: ${weeklyAnalysis.lastWorkoutDay || 'None this week'}
-
-TOMORROW: ${dayOfWeek}`
-
-    if (userPreferences?.healthGoal) {
-      context += `\nHEALTH GOAL: ${userPreferences.healthGoal}`
-    }
-    
-    if (userPreferences?.fitnessLevel) {
-      context += `\nFITNESS LEVEL: ${userPreferences.fitnessLevel}`
-    }
-
-    if (userPreferences?.preferredFocus?.length > 0) {
-      context += `\nPREFERRED FOCUS AREAS: ${userPreferences.preferredFocus.join(', ')}`
-    }
-
-    context += `
-
-TASK: Based on this analysis, recommend what the user should do tomorrow.
+- Days with workouts: ${weeklyAnalysis.completedDays.join(', ') || 'None'}
+- Muscle groups trained: ${weeklyAnalysis.trainedMuscleGroups.join(', ') || 'None'}
+- Total workouts this week: ${weeklyAnalysis.totalWorkouts}
+- Tomorrow already has exercises: ${weeklyAnalysis.tomorrowHasExercises ? 'Yes (' + weeklyAnalysis.tomorrowExerciseCount + ' exercises)' : 'No'}
 
 RULES:
-1. Muscle Recovery: Don't train same muscle groups on consecutive days
-2. Weekly Balance: Aim for 3-5 workouts per week
-3. Progressive Training: Ensure all major muscle groups get trained weekly
-4. Recovery: Recommend rest if they've worked out 5+ times this week
+1. If tomorrow already has 3+ exercises planned, recommend REST (empty focus array)
+2. If tomorrow already has 1-2 exercises, suggest light training (max 1 focus area)
+3. If total workouts >= 5, recommend REST (empty focus array)
+4. Focus on body parts that haven't been trained this week
+5. Use ONLY the valid body parts listed above
 
-RESPONSE FORMAT (JSON only):
+USER PREFERENCES:
+${userPreferences ? JSON.stringify(userPreferences, null, 2) : 'None specified'}
+
+Respond with ONLY a JSON object in this exact format:
 {
-  "shouldWorkout": true/false,
-  "focus": ["primary_muscle", "secondary_muscle"] or [],
-  "reasoning": "2-3 sentences explaining your recommendation"
+  "shouldWorkout": boolean,
+  "focus": ["body_part1", "body_part2"],
+  "reasoning": "explanation for your recommendation"
 }
 
-FOCUS OPTIONS: chest, back, legs, shoulders, arms, core, cardio, full body, flexibility
-
-EXAMPLE RESPONSES:
-{"shouldWorkout": true, "focus": ["chest", "triceps"], "reasoning": "You haven't trained upper body this week. Focus on chest and triceps for balanced muscle development."}
-{"shouldWorkout": false, "focus": [], "reasoning": "You've completed 5 workouts this week. Take tomorrow as a rest day for optimal recovery."}`
+If recommending rest, set shouldWorkout to false and focus to empty array.
+Remember: Use ONLY the exact body part terms from the valid list above.`
 
     try {
+      console.log('🤖 Calling Google AI for workout suggestion...')
+      
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: context }] }],
+          contents: [{
+            parts: [{
+              text: context
+            }]
+          }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 400
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 1024,
           }
         })
       })
 
       if (!response.ok) {
-        console.error('AI API error:', response.status, response.statusText)
+        console.error('❌ Google AI API error:', response.status, response.statusText)
         return null
       }
 
       const data = await response.json()
       
-      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const aiText = data.candidates[0].content.parts[0].text.trim()
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        const aiText = data.candidates[0].content.parts[0].text
         console.log('🤖 Raw AI response:', aiText)
         
         try {
-          const parsed = JSON.parse(aiText)
-          return {
-            focus: parsed.shouldWorkout ? (parsed.focus || []) : [],
-            reasoning: parsed.reasoning || 'AI recommendation generated'
+          // Clean the response text
+          let cleanedText = aiText.trim()
+          
+          // Remove markdown code blocks if present
+          if (cleanedText.startsWith('```json')) {
+            cleanedText = cleanedText.replace(/```json\s*/, '').replace(/```\s*$/, '')
+          } else if (cleanedText.startsWith('```')) {
+            cleanedText = cleanedText.replace(/```\s*/, '').replace(/```\s*$/, '')
           }
+          
+          // Remove any leading/trailing whitespace
+          cleanedText = cleanedText.trim()
+          
+          // Try to extract JSON if there's extra text
+          const jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            cleanedText = jsonMatch[0]
+          }
+          
+          console.log('🧹 Cleaned AI response:', cleanedText)
+          
+          const parsed = JSON.parse(cleanedText)
+          
+          // Validate and filter focus areas to only include valid body parts
+          let validatedFocus: string[] = []
+          if (Array.isArray(parsed.focus)) {
+            validatedFocus = parsed.focus.filter((focus: string) => 
+              validBodyParts.includes(focus.toLowerCase())
+            )
+          }
+          
+          // Validate the response structure
+          if (typeof parsed.shouldWorkout === 'boolean' && typeof parsed.reasoning === 'string') {
+            return {
+              focus: parsed.shouldWorkout ? validatedFocus : [],
+              reasoning: parsed.reasoning || 'AI recommendation generated'
+            }
+          } else {
+            console.error('❌ Invalid AI response structure:', parsed)
+            return null
+          }
+          
         } catch (parseError) {
-          console.error('Failed to parse AI response:', parseError)
+          console.error('❌ Failed to parse AI response:', parseError)
+          console.error('❌ Original text:', aiText)
+          
+          // Try to extract reasoning from the text even if JSON parsing fails
+          const reasoningMatch = aiText.match(/reasoning['":\s]*["']([^"']+)["']/i)
+          if (reasoningMatch) {
+            return {
+              focus: [],
+              reasoning: reasoningMatch[1]
+            }
+          }
+          
           return null
         }
       }
 
       return null
     } catch (error) {
-      console.error('AI API call failed:', error)
+      console.error('❌ AI API call failed:', error)
       return null
     }
   }
@@ -269,16 +331,14 @@ EXAMPLE RESPONSES:
   }
 
   private static getSearchTermsForFocus(focus: string): string[] {
+    // Map AI focus areas to actual API search terms
     const searchMapping: Record<string, string[]> = {
-      'chest': ['chest', 'pectorals', 'pecs'],
-      'back': ['back', 'lats', 'latissimus'],
-      'legs': ['legs', 'quadriceps', 'hamstrings', 'glutes'],
-      'shoulders': ['shoulders', 'deltoids', 'delts'],
-      'arms': ['biceps', 'triceps', 'arms'],
-      'core': ['abs', 'core', 'abdominals'],
-      'cardio': ['cardio'],
-      'full body': ['full body', 'compound'],
-      'flexibility': ['stretching', 'flexibility']
+      'chest': ['chest'],
+      'back': ['back'],
+      'upper arms': ['upper arms'], // This matches the API body part
+      'lower legs': ['lower legs'], // This matches the API body part  
+      'waist': ['waist'],           // This matches the API body part
+      'cardio': ['cardio']
     }
     
     return searchMapping[focus.toLowerCase()] || [focus]
@@ -296,6 +356,29 @@ EXAMPLE RESPONSES:
 
     const trainedGroups = weeklyAnalysis.trainedMuscleGroups
     const totalWorkouts = weeklyAnalysis.totalWorkouts
+    const tomorrowHasExercises = weeklyAnalysis.tomorrowHasExercises
+    const tomorrowExerciseCount = weeklyAnalysis.tomorrowExerciseCount
+    
+    // Rule 0: Tomorrow already has exercises planned
+    if (tomorrowHasExercises && tomorrowExerciseCount >= 3) {
+      reasoning = `You already have ${tomorrowExerciseCount} exercises planned for tomorrow! That's a complete workout. Focus on rest and recovery instead.`
+      return {
+        dayOfWeek: dayOfWeek as any,
+        recommendedFocus: [],
+        suggestedExercises: [],
+        reasoning,
+        validationStatus: 'rule-based'
+      }
+    } else if (tomorrowHasExercises && tomorrowExerciseCount >= 1) {
+      reasoning = `You already have ${tomorrowExerciseCount} exercise${tomorrowExerciseCount > 1 ? 's' : ''} planned for tomorrow. Consider that sufficient or add light complementary exercises.`
+      return {
+        dayOfWeek: dayOfWeek as any,
+        recommendedFocus: ['waist'], // Core/abs for light training
+        suggestedExercises: [],
+        reasoning,
+        validationStatus: 'rule-based'
+      }
+    }
     
     // Rule 1: Too many workouts = rest day
     if (totalWorkouts >= 5) {
@@ -309,16 +392,23 @@ EXAMPLE RESPONSES:
       }
     }
     
-    // Rule 2: Low activity = full body
+    // Rule 2: Low activity = full body (using valid body parts)
     if (totalWorkouts <= 1) {
-      recommendedFocus = ['full body', 'cardio']
-      reasoning = 'Let\'s get back into your routine with a balanced full-body workout to activate all major muscle groups.'
+      recommendedFocus = ['chest', 'back'] // Focus on major muscle groups
+      reasoning = 'Let\'s get back into your routine with chest and back training to activate major muscle groups.'
     }
-    // Rule 3: Target untrained muscle groups
+    // Rule 3: Target untrained muscle groups (using valid API body parts)
     else {
-      const allMuscleGroups = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core']
-      const untrainedGroups = allMuscleGroups.filter(group => 
-        !trainedGroups.some(trained => trained.toLowerCase().includes(group))
+      const validMuscleGroups = ['chest', 'back', 'upper arms', 'lower legs', 'waist']
+      const untrainedGroups = validMuscleGroups.filter(group => 
+        !trainedGroups.some((trained: string) => {
+          const trainedLower = trained.toLowerCase()
+          // Map trained groups to our valid groups
+          if (group === 'upper arms' && (trainedLower.includes('bicep') || trainedLower.includes('tricep') || trainedLower.includes('arm'))) return true
+          if (group === 'lower legs' && (trainedLower.includes('quad') || trainedLower.includes('hamstring') || trainedLower.includes('leg'))) return true
+          if (group === 'waist' && (trainedLower.includes('abs') || trainedLower.includes('core'))) return true
+          return trainedLower.includes(group)
+        })
       )
       
       if (untrainedGroups.length > 0) {
@@ -326,7 +416,7 @@ EXAMPLE RESPONSES:
         reasoning = `Focus on ${recommendedFocus.join(' and ')} since these muscle groups haven't been trained this week yet.`
       } else {
         // All groups trained, suggest light training
-        recommendedFocus = ['cardio', 'core']
+        recommendedFocus = ['cardio', 'waist']
         reasoning = 'Excellent work training all muscle groups! Let\'s focus on cardio and core for active recovery.'
       }
     }
@@ -348,13 +438,13 @@ EXAMPLE RESPONSES:
     tomorrow.setDate(tomorrow.getDate() + 1)
     const tomorrowDay = this.getDayOfWeek(tomorrow)
     
-    // Simple weekly pattern as absolute fallback
+    // Simple weekly pattern using valid API body parts
     const weeklyPattern: Record<string, string[]> = {
-      'Monday': ['chest', 'triceps'],
-      'Tuesday': ['back', 'biceps'],
-      'Wednesday': ['legs'],
-      'Thursday': ['shoulders', 'core'],
-      'Friday': ['full body'],
+      'Monday': ['chest', 'upper arms'],
+      'Tuesday': ['back', 'upper arms'],
+      'Wednesday': ['lower legs'],
+      'Thursday': ['chest', 'waist'],
+      'Friday': ['back', 'lower legs'],
       'Saturday': ['cardio'],
       'Sunday': [] // Rest day
     }
@@ -380,40 +470,66 @@ EXAMPLE RESPONSES:
     restDays: number
     lastWorkoutDay: string | null
     workoutPattern: string[]
+    tomorrowHasExercises: boolean
+    tomorrowExerciseCount: number
   }> {
     try {
       console.log('📊 Getting weekly workout plan...')
       const weeklyPlan = await workoutService.getWeeklyWorkoutPlan(userId)
       const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
       
+      // Get tomorrow's day
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const tomorrowDay = this.getDayOfWeek(tomorrow)
+      
       const completedDays: string[] = []
       const trainedMuscleGroups: string[] = []
       let lastWorkoutDay: string | null = null
       
-      // Analyze each day of the week
+      // Check if tomorrow already has exercises planned
+      const tomorrowPlan = weeklyPlan[tomorrowDay]
+      const tomorrowHasExercises = !!(tomorrowPlan && tomorrowPlan.exercises && tomorrowPlan.exercises.length > 0)
+      const tomorrowExerciseCount = tomorrowPlan?.exercises?.length || 0
+      
+      console.log(`📅 Tomorrow (${tomorrowDay}) analysis:`, {
+        hasExercises: tomorrowHasExercises,
+        exerciseCount: tomorrowExerciseCount,
+        exercises: tomorrowPlan?.exercises?.map(ex => ex.exerciseName) || []
+      })
+      
+      // Analyze the rest of the week
       for (const day of days) {
-        const dayPlan = weeklyPlan[day.toLowerCase()]
+        const dayPlan = weeklyPlan[day]
+        
         if (dayPlan && dayPlan.exercises && dayPlan.exercises.length > 0) {
-          const hasCompletedExercises = dayPlan.exercises.some(ex => ex.completed)
-          if (hasCompletedExercises) {
+          const completedExercises = dayPlan.exercises.filter(ex => ex.completed)
+          
+          if (completedExercises.length > 0) {
             completedDays.push(day)
             lastWorkoutDay = day
-            if (dayPlan.targetMuscleGroups) {
-              trainedMuscleGroups.push(...dayPlan.targetMuscleGroups)
-            }
+            
+            // Extract muscle groups from completed exercises
+            completedExercises.forEach(exercise => {
+              const muscleGroups = this.extractMuscleGroups(exercise.exerciseName)
+              trainedMuscleGroups.push(...muscleGroups)
+            })
           }
         }
       }
-
-      const uniqueMuscleGroups = [...new Set(trainedMuscleGroups)]
+      
+      // Remove duplicates from trained muscle groups
+      const uniqueTrainedGroups = [...new Set(trainedMuscleGroups)]
       
       const analysis = {
         completedDays,
-        trainedMuscleGroups: uniqueMuscleGroups,
+        trainedMuscleGroups: uniqueTrainedGroups,
         totalWorkouts: completedDays.length,
         restDays: 7 - completedDays.length,
         lastWorkoutDay,
-        workoutPattern: completedDays
+        workoutPattern: completedDays,
+        tomorrowHasExercises,
+        tomorrowExerciseCount
       }
       
       console.log('📊 Weekly analysis result:', analysis)
@@ -427,7 +543,9 @@ EXAMPLE RESPONSES:
         totalWorkouts: 0,
         restDays: 7,
         lastWorkoutDay: null,
-        workoutPattern: []
+        workoutPattern: [],
+        tomorrowHasExercises: false,
+        tomorrowExerciseCount: 0
       }
     }
   }

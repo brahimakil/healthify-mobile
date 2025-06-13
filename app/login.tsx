@@ -2,15 +2,15 @@ import { router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import { useState } from 'react'
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native'
 import { useAuth } from '../hooks/useAuth'
 
@@ -42,7 +42,14 @@ export default function Login() {
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
+      <TouchableOpacity 
+        style={styles.backButton} 
+        onPress={() => router.back()}
+      >
+        <Text style={styles.backButtonText}>← Back</Text>
+      </TouchableOpacity>
+      
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text style={styles.title}>Welcome Back</Text>
@@ -93,13 +100,6 @@ export default function Login() {
             <Text style={styles.linkText}>Sign Up</Text>
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>← Back</Text>
-        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   )
@@ -108,7 +108,7 @@ export default function Login() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#10B981',
+    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
@@ -120,15 +120,14 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   title: {
-    color: '#fff',
+    color: '#0F766E',
     fontSize: 32,
     fontWeight: '700',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#fff',
+    color: '#334155',
     fontSize: 16,
-    opacity: 0.9,
     textAlign: 'center',
   },
   form: {
@@ -138,21 +137,23 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    color: '#fff',
+    color: '#334155',
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F1F5F9',
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 12,
     fontSize: 16,
     color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   button: {
-    backgroundColor: '#fff',
+    backgroundColor: '#0F766E',
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -162,7 +163,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   buttonText: {
-    color: '#10B981',
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
   },
@@ -172,22 +173,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#fff',
+    color: '#64748B',
     fontSize: 16,
   },
   linkText: {
-    color: '#fff',
+    color: '#0F766E',
     fontSize: 16,
     fontWeight: '700',
-    textDecorationLine: 'underline',
   },
   backButton: {
     position: 'absolute',
     top: 60,
     left: 24,
+    zIndex: 10,
   },
   backButtonText: {
-    color: '#fff',
+    color: '#0F766E',
     fontSize: 16,
     fontWeight: '600',
   },

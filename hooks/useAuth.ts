@@ -1,15 +1,15 @@
 import { router } from 'expo-router'
 import {
-    createUserWithEmailAndPassword,
-    User as FirebaseUser,
-    onAuthStateChanged,
-    signInWithEmailAndPassword,
-    signOut,
-    updateProfile
+  createUserWithEmailAndPassword,
+  User as FirebaseUser,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile
 } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { Platform } from 'react-native'
-import { PlanGenerationService } from '../services/planGenerationService'
+import { GoalCalculationService } from '../services/goalCalculationService'
 import { UserService } from '../services/userService'
 import { auth } from '../utils/firebase'
 
@@ -107,46 +107,39 @@ export const useAuth = (): AuthContextType => {
       }
 
       // Calculate personalized goals based on health goals
-      const healthGoal = userData?.healthGoals || 'Improve Fitness' // Default to one of the 4 options
-      const weight = userData?.weight ? parseInt(userData.weight) : 70
-      const height = userData?.height ? parseInt(userData.height) : 170
+      const healthGoal = userData?.healthGoals || 'Improve Fitness'
+      
+      // Convert all numeric values to numbers properly
+      const weight = userData?.weight ? parseFloat(userData.weight) : 70
+      const height = userData?.height ? parseFloat(userData.height) : 170
+      const goalWeight = userData?.goalWeight ? parseFloat(userData.goalWeight) : undefined
       const age = userData?.dateOfBirth ? calculateAge(userData.dateOfBirth) : 30
       const gender = userData?.gender?.toLowerCase() as 'male' | 'female' | undefined
       const activityLevel = mapActivityLevel(userData?.activityLevel)
 
-      // Use existing goal calculation (preserves current logic)
-      const goalSettings = {
-        'Lose Weight': { calories: 0.8, protein: 1.6, water: 35, sleep: 8, workouts: 4 },
-        'Gain Weight': { calories: 1.2, protein: 1.8, water: 40, sleep: 8, workouts: 5 },
-        'Build Muscle': { calories: 1.1, protein: 2.0, water: 40, sleep: 8, workouts: 5 },
-        'Improve Fitness': { calories: 1.0, protein: 1.4, water: 35, sleep: 8, workouts: 4 },
+      // Create a proper user object for goal calculations
+      const tempUser = {
+        id: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        profile: {
+          name: userData?.firstName && userData?.lastName 
+            ? `${userData.firstName} ${userData.lastName}` 
+            : '',
+          age: age,
+          gender: gender,
+          height: height,
+          currentWeight: weight,
+          goalWeight: goalWeight,
+          activityLevel: activityLevel,
+          healthGoals: healthGoal
+        }
       }
 
-      const modifier = goalSettings[healthGoal as keyof typeof goalSettings] || goalSettings['Improve Fitness']
-      
-      // Calculate BMR and TDEE (preserves existing calculation logic)
-      const bmr = gender === 'male' 
-        ? 10 * weight + 6.25 * height - 5 * age + 5
-        : 10 * weight + 6.25 * height - 5 * age - 161
+      // Calculate personalized goals with proper user object
+      const personalizedGoals = GoalCalculationService.calculatePersonalizedGoals(tempUser as any, healthGoal)
 
-      const activityMultipliers = {
-        'sedentary': 1.2,
-        'light': 1.375,
-        'moderate': 1.55,
-        'active': 1.725
-      }
-      
-      const tdee = bmr * (activityMultipliers[activityLevel] || 1.375)
-      
-      const personalizedGoals = {
-        dailyCalorieTarget: Math.round(tdee * modifier.calories),
-        dailyWaterTarget: Math.round(weight * modifier.water),
-        sleepDurationTarget: modifier.sleep,
-        weeklyWorkoutTarget: modifier.workouts
-      }
-
-      // Create user document in Firestore (preserves existing structure)
-      const newUser = await UserService.createUser(firebaseUser.uid, {
+      // Create user document in Firestore
+      await UserService.createUser(firebaseUser.uid, {
         email: firebaseUser.email || '',
         displayName: userData?.firstName && userData?.lastName 
           ? `${userData.firstName} ${userData.lastName}` 
@@ -161,21 +154,17 @@ export const useAuth = (): AuthContextType => {
           gender: gender,
           height: height,
           currentWeight: weight,
-          goalWeight: userData?.goalWeight ? parseInt(userData.goalWeight) : undefined,
+          ...(goalWeight && { goalWeight: goalWeight }),
           activityLevel: activityLevel,
           healthGoals: healthGoal,
-          ...personalizedGoals
+          dailyCalorieTarget: personalizedGoals.calorieGoal,
+          dailyWaterTarget: GoalCalculationService.getRecommendedWaterIntake(tempUser as any, healthGoal),
+          sleepDurationTarget: GoalCalculationService.getRecommendedSleep(healthGoal),
+          weeklyWorkoutTarget: GoalCalculationService.getRecommendedWorkouts(healthGoal)
         }
       })
 
-      // Get the created user for plan generation
-      const createdUser = await UserService.getUser(firebaseUser.uid)
-      if (createdUser) {
-        // Generate comprehensive plan using the new service
-        await PlanGenerationService.generateComprehensivePlan(createdUser, healthGoal)
-      }
-
-      console.log('✅ User created with personalized goals and comprehensive plan')
+      console.log('✅ User created with personalized goals')
       
       // Navigate to dashboard after successful registration
       setTimeout(() => {
