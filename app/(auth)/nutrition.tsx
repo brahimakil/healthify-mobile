@@ -1,3 +1,6 @@
+import { Ionicons } from '@expo/vector-icons'
+import { Image } from 'expo-image'
+import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
@@ -16,6 +19,7 @@ import {
 import {
   AddMealIcon,
   CaloriesIcon,
+  CameraIcon,
   CarbsIcon,
   CloseIcon,
   CustomFoodIcon,
@@ -30,6 +34,7 @@ import { ProtectedRoute } from '../../components/ProtectedRoute'
 import { useAuth } from '../../hooks/useAuth'
 import { MainLayout } from '../../layouts/MainLayout'
 import { AIMealSuggestionService } from '../../services/aiMealSuggestionService'
+import { MealImageAnalysisService } from '../../services/mealImageAnalysisService'
 import { NutritionService } from '../../services/nutritionService'
 import { PlanGenerationService } from '../../services/planGenerationService'
 import { DailyNutritionSummary, FoodItem, FoodSearchResult, MealEntry, NutritionInfo } from '../../types/nutrition'
@@ -221,6 +226,9 @@ export default function Nutrition() {
         break
       case 'hydration':
         router.push('/(auth)/hydration')
+        break
+      case 'dietitians':
+        router.push('/(auth)/dietitians')
         break
       case 'settings':
         router.push('/(auth)/settings')
@@ -607,9 +615,9 @@ export default function Nutrition() {
         protein: parseFloat(customFoodForm.protein),
         carbs: parseFloat(customFoodForm.carbs),
         fat: parseFloat(customFoodForm.fat),
-        fiber: customFoodForm.fiber ? parseFloat(customFoodForm.fiber) : undefined,
-        sugar: customFoodForm.sugar ? parseFloat(customFoodForm.sugar) : undefined,
-        sodium: customFoodForm.sodium ? parseFloat(customFoodForm.sodium) : undefined
+        fiber: customFoodForm.fiber ? parseFloat(customFoodForm.fiber) : 0,
+        sugar: customFoodForm.sugar ? parseFloat(customFoodForm.sugar) : 0,
+        sodium: customFoodForm.sodium ? parseFloat(customFoodForm.sodium) : 0
       }
 
       const foodData: Omit<FoodItem, 'id' | 'isCustom' | 'userId' | 'createdAt' | 'updatedAt'> = {
@@ -618,7 +626,8 @@ export default function Nutrition() {
         brand: customFoodForm.brand.trim() || 'Custom',
         servingSize: parseFloat(customFoodForm.servingSize),
         servingUnit: customFoodForm.servingUnit,
-        nutritionPer100g
+        nutritionPer100g,
+        image: customFoodImage // Add the image
       }
 
       console.log('💾 Saving custom food data:', foodData)
@@ -628,7 +637,7 @@ export default function Nutrition() {
       // ✅ FIX: Refresh custom foods list immediately
       await loadUserCustomFoods()
       
-      // Reset form
+      // Reset form and image
       const currentName = customFoodForm.name
       setCustomFoodForm({
         name: '',
@@ -644,6 +653,7 @@ export default function Nutrition() {
         sugar: '',
         sodium: ''
       })
+      setCustomFoodImage(null)
       
       // ✅ FIX: Switch to custom foods tab to show the created food
       setSearchMode('custom')
@@ -1180,6 +1190,106 @@ export default function Nutrition() {
       Alert.alert('Error', `Failed to add ${suggestion.description}: ${error.message}`)
     }
   }
+
+  // Image upload state
+  const [customFoodImage, setCustomFoodImage] = useState<string | null>(null);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+
+  const pickImage = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera roll permissions to upload a photo.');
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        setCustomFoodImage(base64Image);
+        analyzeImage(base64Image);
+      }
+    } catch (error) {
+      console.error('❌ Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image from gallery.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      // Request permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please grant camera permissions to take a photo.');
+        return;
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
+        setCustomFoodImage(base64Image);
+        analyzeImage(base64Image);
+      }
+    } catch (error) {
+      console.error('❌ Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo.');
+    }
+  };
+
+  const analyzeImage = async (imageBase64: string) => {
+    if (!user) {
+      Alert.alert('Error', 'You must be logged in to analyze food images.');
+      return;
+    }
+
+    try {
+      setIsAnalyzingImage(true);
+      
+      // Call the meal image analysis service
+      const result = await MealImageAnalysisService.analyzeImage(user.uid, imageBase64);
+      
+      if (result.success) {
+        // Update the form with the analysis results
+        setCustomFoodForm(prev => ({
+          ...prev,
+          name: result.foodName,
+          description: result.description || '',
+          calories: result.nutritionPer100g.calories.toString(),
+          protein: result.nutritionPer100g.protein.toString(),
+          carbs: result.nutritionPer100g.carbs.toString(),
+          fat: result.nutritionPer100g.fat.toString(),
+          fiber: result.nutritionPer100g.fiber ? result.nutritionPer100g.fiber.toString() : '',
+          sugar: result.nutritionPer100g.sugar ? result.nutritionPer100g.sugar.toString() : '',
+          sodium: result.nutritionPer100g.sodium ? result.nutritionPer100g.sodium.toString() : ''
+        }));
+        
+        Alert.alert('Success', 'Food analyzed successfully! Please verify the nutritional information and adjust if needed.');
+      } else {
+        Alert.alert('Analysis Failed', result.message || 'Could not analyze the food image. Please enter nutritional information manually.');
+      }
+    } catch (error) {
+      console.error('❌ Error analyzing food image:', error);
+      Alert.alert('Error', 'Failed to analyze food image. Please try again or enter information manually.');
+    } finally {
+      setIsAnalyzingImage(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -1817,6 +1927,48 @@ export default function Nutrition() {
                         keyboardType="numeric"
                       />
                     </View>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Food Image</Text>
+                    <View style={styles.imageUploadContainer}>
+                      {customFoodImage ? (
+                        <View style={styles.imagePreviewContainer}>
+                          <Image source={{ uri: customFoodImage }} style={styles.imagePreview} />
+                          <TouchableOpacity 
+                            style={styles.removeImageButton}
+                            onPress={() => setCustomFoodImage(null)}
+                          >
+                            <CloseIcon size={16} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.imageUploadButtons}>
+                          <TouchableOpacity 
+                            style={styles.imageButton} 
+                            onPress={takePhoto}
+                            disabled={isAnalyzingImage}
+                          >
+                            <CameraIcon size={24} color="#FFFFFF" />
+                            <Text style={styles.imageButtonText}>Take Photo</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={styles.imageButton} 
+                            onPress={pickImage}
+                            disabled={isAnalyzingImage}
+                          >
+                            <Ionicons name="image-outline" size={24} color="#FFFFFF" />
+                            <Text style={styles.imageButtonText}>Upload</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                    {isAnalyzingImage && (
+                      <View style={styles.analyzingContainer}>
+                        <ActivityIndicator size="small" color="#10B981" />
+                        <Text style={styles.analyzingText}>Analyzing food image with AI...</Text>
+                      </View>
+                    )}
                   </View>
 
                   <TouchableOpacity
@@ -2871,5 +3023,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#047857',
     lineHeight: 20,
+  },
+  imageUploadContainer: {
+    marginTop: 8,
+    minHeight: 120,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+    overflow: 'hidden',
+  },
+  imageUploadButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    height: 120,
+  },
+  imageButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  imageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  imagePreviewContainer: {
+    position: 'relative',
+    height: 200,
+  },
+  imagePreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analyzingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  analyzingText: {
+    color: '#10B981',
+    fontSize: 14,
   },
 })

@@ -1,25 +1,25 @@
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    orderBy,
-    query,
-    serverTimestamp,
-    setDoc,
-    updateDoc,
-    where
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where
 } from 'firebase/firestore'
 import {
-    DailyNutritionGoals,
-    DailyNutritionSummary,
-    FoodItem,
-    FoodSearchResponse,
-    FoodSearchResult,
-    Meal,
-    MealEntry,
-    NutritionInfo
+  DailyNutritionGoals,
+  DailyNutritionSummary,
+  FoodItem,
+  FoodSearchResponse,
+  FoodSearchResult,
+  Meal,
+  MealEntry,
+  NutritionInfo
 } from '../types/nutrition'
 import { db } from '../utils/firebase'
 
@@ -423,8 +423,21 @@ export class NutritionService {
       const foodRef = doc(collection(db, FOOD_ITEMS_COLLECTION))
       console.log('📄 Generated food reference ID:', foodRef.id)
       
+      // Sanitize nutrition data to prevent undefined values
+      const sanitizedNutrition: NutritionInfo = {
+        calories: foodData.nutritionPer100g.calories,
+        protein: foodData.nutritionPer100g.protein,
+        carbs: foodData.nutritionPer100g.carbs,
+        fat: foodData.nutritionPer100g.fat,
+        // Replace undefined values with 0 or null
+        fiber: foodData.nutritionPer100g.fiber ?? 0,
+        sugar: foodData.nutritionPer100g.sugar ?? 0,
+        sodium: foodData.nutritionPer100g.sodium ?? 0
+      }
+      
       const foodItem: Omit<FoodItem, 'id'> & { userId: string } = {
         ...foodData,
+        nutritionPer100g: sanitizedNutrition, // Use sanitized nutrition data
         isCustom: true,
         userId,
         createdAt: new Date(),

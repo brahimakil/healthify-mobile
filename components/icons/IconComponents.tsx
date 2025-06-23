@@ -120,3 +120,7 @@ export const DropletIcon: React.FC<IconProps> = ({ size = 24, color = '#1F2937' 
 export const UserIcon: React.FC<IconProps> = ({ size = 24, color = '#1F2937' }) => (
   <Ionicons name="person-outline" size={size} color={color} />
 )
+
+export const PersonGroupIcon: React.FC<IconProps> = ({ size = 24, color = '#1F2937' }) => (
+  <Ionicons name="people-outline" size={size} color={color} />
+)

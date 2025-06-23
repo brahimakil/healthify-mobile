@@ -8,6 +8,7 @@ import {
   DashboardIcon,
   LogoutIcon,
   NutritionIcon,
+  PersonGroupIcon,
   SettingsIcon,
   SleepIcon,
   WaterIcon,
@@ -60,6 +61,13 @@ const menuItems = [
     route: 'hydration', 
     icon: WaterIcon,
     description: 'Water intake'
+  },
+  { 
+    id: 'dietitians', 
+    label: 'Dietitians', 
+    route: 'dietitians', 
+    icon: PersonGroupIcon,
+    description: 'System dietitians'
   },
   { 
     id: 'settings', 

@@ -9,6 +9,7 @@ export default function AuthLayout() {
       <Stack.Screen name="sleep" options={{ headerShown: false }} />
       <Stack.Screen name="hydration" options={{ headerShown: false }} />
       <Stack.Screen name="settings" options={{ headerShown: false }} />
+      <Stack.Screen name="dietitians" options={{ headerShown: false }} />
       {/* Add other auth-protected routes here later */}
     </Stack>
   );

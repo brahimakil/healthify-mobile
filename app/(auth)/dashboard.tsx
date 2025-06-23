@@ -284,8 +284,11 @@ export default function Dashboard() {
       case 'hydration':
         router.push('/(auth)/hydration')
         break
+      case 'dietitians':
+        router.push('/(auth)/dietitians')
+        break
       case 'settings':
-        router.push('/settings')
+        router.push('/(auth)/settings')
         break
     }
   }

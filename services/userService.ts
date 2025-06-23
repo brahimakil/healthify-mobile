@@ -2,9 +2,12 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
+  query,
   serverTimestamp,
   setDoc,
-  updateDoc
+  updateDoc,
+  where
 } from 'firebase/firestore'
 import { User, UserDocument } from '../types/user'
 import { db } from '../utils/firebase'
@@ -119,5 +122,28 @@ export class UserService {
     })
     
     return documentRef.id
+  }
+
+  static async getDietitians(): Promise<User[]> {
+    try {
+      const q = query(
+        collection(db, USERS_COLLECTION),
+        where('role', '==', 'dietitian')
+      )
+      
+      const snapshot = await getDocs(q)
+      return snapshot.docs.map(doc => {
+        const data = doc.data() as UserDocument
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt instanceof Date ? data.createdAt : new Date(data.createdAt?.toDate?.() || data.createdAt),
+          updatedAt: data.updatedAt instanceof Date ? data.updatedAt : new Date(data.updatedAt?.toDate?.() || data.updatedAt),
+        }
+      })
+    } catch (error) {
+      console.error('Error getting dietitians:', error)
+      return []
+    }
   }
 } 

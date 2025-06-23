@@ -214,6 +214,9 @@ export default function SettingsScreen() {
       case 'hydration':
         router.push('/(auth)/hydration')
         break
+      case 'dietitians':
+        router.push('/(auth)/dietitians')
+        break
       case 'profile':
         router.push('/(auth)/profile')
         break

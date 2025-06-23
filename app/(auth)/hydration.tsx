@@ -147,6 +147,12 @@ export default function Hydration() {
       case 'sleep':
         router.push('/(auth)/sleep')
         break
+      case 'hydration':
+        // Already on hydration page
+        break
+      case 'dietitians':
+        router.push('/(auth)/dietitians')
+        break
       case 'settings':
         router.push('/(auth)/settings')
         break
