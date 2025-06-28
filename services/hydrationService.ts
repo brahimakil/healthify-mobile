@@ -1,13 +1,13 @@
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    query,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore'
 import { DailyHydrationSummary, DrinkType, HydrationGoal, WaterEntry } from '../types/hydration'
 import { User } from '../types/user'
@@ -78,13 +78,19 @@ export class HydrationService {
   ): Promise<WaterEntry> {
     const now = new Date()
     
-    // Use the current date in the user's timezone, not UTC
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const dateString = today.toISOString().split('T')[0]
+    // FIX: Use the same date logic as the frontend
+    const year = now.getFullYear()
+    const month = (now.getMonth() + 1).toString().padStart(2, '0')
+    const day = now.getDate().toString().padStart(2, '0')
+    const dateString = `${year}-${month}-${day}`
+
+    // OLD BROKEN CODE:
+    // const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    // const dateString = today.toISOString().split('T')[0]
 
     const entryData = {
       userId,
-      date: dateString, // This should match the selectedDate format
+      date: dateString, // Now this will match the selectedDate format
       amount: amount,
       timeConsumed: now,
       drinkType,
@@ -95,7 +101,7 @@ export class HydrationService {
 
     try {
       console.log('💧 Adding water entry to Firestore:', entryData)
-      console.log('📅 Date being saved:', dateString, 'vs current date:', new Date().toISOString().split('T')[0])
+      console.log('📅 Date being saved:', dateString, 'vs current date:', `${year}-${month}-${day}`)
       
       const docRef = await addDoc(collection(db, this.COLLECTION_NAME), entryData)
       console.log('✅ Water entry added with ID:', docRef.id)

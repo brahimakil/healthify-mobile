@@ -1,21 +1,22 @@
 import { router } from 'expo-router'
 import React, { useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native'
+import { CustomAlert } from '../../components/CustomAlert'
 import {
-    EditIcon
+  EditIcon
 } from '../../components/icons/IconComponents'
 import { ProtectedRoute } from '../../components/ProtectedRoute'
 import { useAuth } from '../../hooks/useAuth'
+import { useCustomAlert } from '../../hooks/useCustomAlert'
 import { MainLayout } from '../../layouts/MainLayout'
 import { PlanGenerationService } from '../../services/planGenerationService'
 import { UserService } from '../../services/userService'
@@ -23,6 +24,7 @@ import { User } from '../../types/user'
 
 export default function Profile() {
   const { user, logout } = useAuth()
+  const { alertConfig, visible: alertVisible, showAlert, hideAlert } = useCustomAlert()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [userProfile, setUserProfile] = useState<User | null>(null)
@@ -71,7 +73,7 @@ export default function Profile() {
       })
     } catch (error) {
       console.error('Failed to load user profile:', error)
-      Alert.alert('Error', 'Failed to load profile data')
+      showAlert('Error', 'Failed to load profile data')
     } finally {
       setLoading(false)
     }
@@ -103,7 +105,7 @@ export default function Profile() {
     try {
       await logout()
     } catch (error) {
-      Alert.alert('Error', 'Failed to sign out. Please try again.')
+      showAlert('Error', 'Failed to sign out. Please try again.')
     }
   }
 
@@ -134,7 +136,7 @@ export default function Profile() {
         return
       }
       
-      Alert.alert(
+      showAlert(
         'Change Health Plan',
         'Changing your health plan will reset your nutrition, workout, sleep, and hydration goals to match your new plan. Your logged data will be preserved. Do you want to continue?',
         [
@@ -189,11 +191,11 @@ export default function Profile() {
       setUserProfile(updatedProfile)
       setEditMode(false)
       
-      Alert.alert('Success', 'Profile updated successfully!')
+      showAlert('Success', 'Profile updated successfully!')
       console.log('✅ Profile save completed successfully')
     } catch (error) {
       console.error('Failed to update profile:', error)
-      Alert.alert('Error', 'Failed to update profile. Please try again.')
+      showAlert('Error', 'Failed to update profile. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -225,10 +227,10 @@ export default function Profile() {
       setUserProfile(updatedProfile)
       setEditMode(false)
       
-      Alert.alert('Success', 'Profile and health plan updated successfully!')
+      showAlert('Success', 'Profile and health plan updated successfully!')
     } catch (error) {
       console.error('Failed to update profile with plan change:', error)
-      Alert.alert('Error', 'Failed to update profile and health plan. Please try again.')
+      showAlert('Error', 'Failed to update profile and health plan. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -311,179 +313,138 @@ export default function Profile() {
         onLogout={handleLogout}
         user={user}
       >
-        <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-          {/* Profile Header */}
-          <View style={styles.profileHeader}>
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {(userProfile?.displayName || 'User').charAt(0).toUpperCase()}
-                </Text>
+        <ScrollView style={styles.container}>
+          <View style={styles.profileSection}>
+            <View style={styles.profileHeader}>
+              <View style={styles.avatarContainer}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {userProfile?.displayName?.charAt(0)?.toUpperCase() || 'U'}
+                  </Text>
+                </View>
               </View>
-            </View>
-            <Text style={styles.userName}>{userProfile?.displayName || 'User'}</Text>
-            <Text style={styles.userEmail}>{userProfile?.email}</Text>
-            
-            {!editMode && (
+              <View style={styles.profileInfo}>
+                <Text style={styles.userName}>{userProfile?.displayName || 'User'}</Text>
+                <Text style={styles.userEmail}>{userProfile?.email}</Text>
+              </View>
               <TouchableOpacity 
                 style={styles.editButton}
-                onPress={() => setEditMode(true)}
+                onPress={() => setEditMode(!editMode)}
               >
-                <EditIcon size={16} color="#10B981" />
-                <Text style={styles.editButtonText}>Edit Profile</Text>
+                <EditIcon size={20} color="#10B981" />
               </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.formSection}>
+            <Text style={styles.sectionTitle}>Personal Information</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Display Name</Text>
+              <TextInput
+                style={[styles.input, !editMode && styles.inputDisabled]}
+                value={formData.displayName}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, displayName: text }))}
+                placeholder="Enter your display name"
+                editable={editMode}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Age</Text>
+              <TextInput
+                style={[styles.input, !editMode && styles.inputDisabled]}
+                value={formData.age}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, age: text }))}
+                placeholder="Enter your age"
+                keyboardType="numeric"
+                editable={editMode}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Height (cm)</Text>
+              <TextInput
+                style={[styles.input, !editMode && styles.inputDisabled]}
+                value={formData.height}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, height: text }))}
+                placeholder="Enter your height in cm"
+                keyboardType="numeric"
+                editable={editMode}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Current Weight (kg)</Text>
+              <TextInput
+                style={[styles.input, !editMode && styles.inputDisabled]}
+                value={formData.currentWeight}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, currentWeight: text }))}
+                placeholder="Enter your current weight"
+                keyboardType="numeric"
+                editable={editMode}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Goal Weight (kg)</Text>
+              <TextInput
+                style={[styles.input, !editMode && styles.inputDisabled]}
+                value={formData.goalWeight}
+                onChangeText={(text) => setFormData(prev => ({ ...prev, goalWeight: text }))}
+                placeholder="Enter your goal weight"
+                keyboardType="numeric"
+                editable={editMode}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Health Goals</Text>
+              <TouchableOpacity
+                style={[styles.input, styles.pickerInput, !editMode && styles.inputDisabled]}
+                onPress={() => editMode && setShowHealthGoalPicker(true)}
+                disabled={!editMode}
+              >
+                <Text style={[styles.pickerText, !formData.healthGoals && styles.placeholderText]}>
+                  {formData.healthGoals || 'Select your health goal'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {editMode && (
+              <View style={styles.buttonGroup}>
+                <TouchableOpacity 
+                  style={styles.cancelButton} 
+                  onPress={handleCancel}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
 
-          {/* Profile Details */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Personal Information</Text>
-            
-            <View style={styles.infoCard}>
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Display Name</Text>
-                {editMode ? (
-                  <TextInput
-                    style={styles.input}
-                    value={formData.displayName}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, displayName: text }))}
-                    placeholder="Enter your name"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>{userProfile?.displayName || 'Not set'}</Text>
-                )}
-              </View>
-
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Age</Text>
-                {editMode ? (
-                  <TextInput
-                    style={styles.input}
-                    value={formData.age}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, age: text }))}
-                    placeholder="Enter your age"
-                    keyboardType="numeric"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>
-                    {userProfile?.profile?.age ? `${userProfile.profile.age} years` : 'Not set'}
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Height</Text>
-                {editMode ? (
-                  <TextInput
-                    style={styles.input}
-                    value={formData.height}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, height: text }))}
-                    placeholder="Enter height in cm"
-                    keyboardType="numeric"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>
-                    {userProfile?.profile?.height ? `${userProfile.profile.height} cm` : 'Not set'}
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Current Weight</Text>
-                {editMode ? (
-                  <TextInput
-                    style={styles.input}
-                    value={formData.currentWeight}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, currentWeight: text }))}
-                    placeholder="Enter weight in kg"
-                    keyboardType="numeric"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>
-                    {userProfile?.profile?.currentWeight ? `${userProfile.profile.currentWeight} kg` : 'Not set'}
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Goal Weight</Text>
-                {editMode ? (
-                  <TextInput
-                    style={styles.input}
-                    value={formData.goalWeight}
-                    onChangeText={(text) => setFormData(prev => ({ ...prev, goalWeight: text }))}
-                    placeholder="Enter goal weight in kg"
-                    keyboardType="numeric"
-                  />
-                ) : (
-                  <Text style={styles.infoValue}>
-                    {userProfile?.profile?.goalWeight ? `${userProfile.profile.goalWeight} kg` : 'Not set'}
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Health Goal</Text>
-                {editMode ? (
-                  <TouchableOpacity 
-                    style={styles.input}
-                    onPress={() => setShowHealthGoalPicker(true)}
-                  >
-                    <Text style={[styles.inputText, !formData.healthGoals && styles.placeholder]}>
-                      {formData.healthGoals || 'Select health goal'}
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={styles.infoValue}>
-                    {userProfile?.profile?.healthGoals || 'Not set'}
-                  </Text>
-                )}
-              </View>
-
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Gender</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.profile?.gender || 'Not set'}
-                </Text>
-              </View>
-
-              <View style={styles.infoItem}>
-                <Text style={styles.infoLabel}>Activity Level</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.profile?.activityLevel || 'Not set'}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Action Buttons */}
-          {editMode && (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={handleCancel}
-                disabled={saving}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-                onPress={handleSave}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+          <HealthGoalPickerModal />
+          
+          {/* Custom Alert */}
+          {alertConfig && (
+            <CustomAlert
+              visible={alertVisible}
+              title={alertConfig.title}
+              message={alertConfig.message}
+              buttons={alertConfig.buttons}
+              onClose={hideAlert}
+            />
           )}
         </ScrollView>
-
-        {/* Health Goal Picker Modal */}
-        <HealthGoalPickerModal />
       </MainLayout>
     </ProtectedRoute>
   )
@@ -492,137 +453,116 @@ export default function Profile() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    padding: 20,
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 10,
     fontSize: 16,
-    color: '#6B7280',
+    color: '#64748B',
+  },
+  profileSection: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
   profileHeader: {
-    backgroundColor: '#ffffff',
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 32,
-    paddingHorizontal: 20,
-    marginBottom: 16,
   },
   avatarContainer: {
-    marginBottom: 16,
+    marginRight: 16,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#10B981',
-    alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    alignItems: 'center',
   },
   avatarText: {
-    color: '#ffffff',
-    fontSize: 32,
+    color: '#FFFFFF',
+    fontSize: 24,
     fontWeight: '700',
   },
+  profileInfo: {
+    flex: 1,
+  },
   userName: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1F2937',
     marginBottom: 4,
   },
   userEmail: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 16,
+    fontSize: 14,
+    color: '#64748B',
   },
   editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
+    padding: 8,
   },
-  editButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#10B981',
-    marginLeft: 6,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+  formSection: {
+    padding: 20,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1F2937',
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  infoCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+  inputGroup: {
+    marginBottom: 20,
   },
-  infoItem: {
-    marginBottom: 16,
-  },
-  infoLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    marginBottom: 6,
-  },
-  infoValue: {
+  label: {
     fontSize: 16,
-    color: '#1F2937',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
   },
   input: {
-    fontSize: 16,
-    color: '#1F2937',
+    backgroundColor: '#F9FAFB',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E5E7EB',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#F9FAFB',
-  },
-  inputText: {
+    paddingVertical: 12,
     fontSize: 16,
     color: '#1F2937',
   },
-  placeholder: {
+  inputDisabled: {
+    backgroundColor: '#F3F4F6',
+    color: '#6B7280',
+  },
+  pickerInput: {
+    justifyContent: 'center',
+  },
+  pickerText: {
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  placeholderText: {
     color: '#9CA3AF',
   },
-  actionButtons: {
+  buttonGroup: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 32,
-    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 20,
   },
   cancelButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    borderRadius: 8,
     alignItems: 'center',
+    marginRight: 10,
   },
   cancelButtonText: {
     fontSize: 16,
@@ -631,18 +571,19 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
     backgroundColor: '#10B981',
+    paddingVertical: 12,
+    borderRadius: 8,
     alignItems: 'center',
+    marginLeft: 10,
   },
   saveButtonDisabled: {
-    backgroundColor: '#9CA3AF',
+    opacity: 0.7,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: '#FFFFFF',
   },
   modalOverlay: {
     flex: 1,
@@ -651,25 +592,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#ffffff',
-    padding: 20,
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
+    padding: 20,
     width: '80%',
-    maxHeight: '80%',
+    maxHeight: '70%',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#1F2937',
     marginBottom: 16,
+    textAlign: 'center',
   },
   optionsList: {
-    maxHeight: 200,
+    maxHeight: 300,
   },
   optionItem: {
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#D1D5DB',
+    borderBottomColor: '#E5E7EB',
   },
   optionText: {
     fontSize: 16,

@@ -4,7 +4,7 @@ import { db } from '../utils/firebase'
 import { GoalCalculationService } from './goalCalculationService'
 import { HydrationService } from './hydrationService'
 import { NutritionService } from './nutritionService'
-import { SleepService } from './sleepService'
+import { sleepService } from './sleepService'
 import { UserService } from './userService'
 
 export interface HealthPlan {
@@ -44,7 +44,7 @@ export class PlanGenerationService {
 
       // 3. Set sleep goal (preserves existing sleep functionality)
       const sleepGoal = GoalCalculationService.getRecommendedSleep(healthGoal)
-      await SleepService.setSleepGoals({
+      await sleepService.setSleepGoals({
         userId: user.id,
         targetSleepDuration: sleepGoal,
         targetBedtime: '22:00',
