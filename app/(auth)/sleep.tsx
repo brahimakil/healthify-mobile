@@ -53,6 +53,9 @@ export default function SleepScreen() {
   const [saving, setSaving] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<any>(null)
   const [showPlanInfo, setShowPlanInfo] = useState(false)
+  const [showInsightsModal, setShowInsightsModal] = useState(false)
+  const [sleepInsights, setSleepInsights] = useState<any>(null)
+  const [insightsLoading, setInsightsLoading] = useState(false)
   
   // Form data with proper default times
   const [sleepFormData, setSleepFormData] = useState(() => {
@@ -164,6 +167,119 @@ export default function SleepScreen() {
       setCurrentPlan(plan)
     } catch (error) {
       console.error('❌ Error loading current plan:', error)
+    }
+  }
+
+  const loadSleepInsights = async () => {
+    if (!user?.uid) return
+    
+    try {
+      setInsightsLoading(true)
+      console.log('📊 Loading sleep insights...')
+      
+      // Get sleep data for the last 30 days
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 30)
+      
+      const sleepEntries = await sleepService.getSleepHistory(user.uid, startDate, endDate)
+      console.log('📈 Sleep entries loaded:', sleepEntries.length)
+      
+      if (sleepEntries.length === 0) {
+        setSleepInsights({
+          hasData: false,
+          message: "No sleep data available. Start logging your sleep to see insights!"
+        })
+        return
+      }
+      
+      // Calculate insights
+      const totalEntries = sleepEntries.length
+      const totalSleep = sleepEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0)
+      const averageSleep = totalSleep / totalEntries
+      const averageQuality = sleepEntries.reduce((sum, entry) => sum + entry.quality, 0) / totalEntries
+      
+      // Find best and worst sleep days
+      const sortedByDuration = [...sleepEntries].sort((a, b) => (b.duration || 0) - (a.duration || 0))
+      const bestSleep = sortedByDuration[0]
+      const worstSleep = sortedByDuration[sortedByDuration.length - 1]
+      
+      // Quality analysis
+      const excellentSleep = sleepEntries.filter(entry => entry.quality >= 4).length
+      const poorSleep = sleepEntries.filter(entry => entry.quality <= 2).length
+      
+      // Sleep consistency (how much sleep varies)
+      const sleepTimes = sleepEntries.map(entry => entry.duration || 0)
+      const avgDuration = sleepTimes.reduce((sum, time) => sum + time, 0) / sleepTimes.length
+      const variance = sleepTimes.reduce((sum, time) => sum + Math.pow(time - avgDuration, 2), 0) / sleepTimes.length
+      const consistency = Math.max(0, 100 - (Math.sqrt(variance) / 60 * 10)) // Convert to percentage
+      
+      // Weekly patterns
+      const weekdaySleep = sleepEntries.filter(entry => {
+        const day = new Date(entry.date).getDay()
+        return day >= 1 && day <= 5 // Monday to Friday
+      })
+      const weekendSleep = sleepEntries.filter(entry => {
+        const day = new Date(entry.date).getDay()
+        return day === 0 || day === 6 // Saturday and Sunday
+      })
+      
+      const weekdayAvg = weekdaySleep.length > 0 ? 
+        weekdaySleep.reduce((sum, entry) => sum + (entry.duration || 0), 0) / weekdaySleep.length : 0
+      const weekendAvg = weekendSleep.length > 0 ? 
+        weekendSleep.reduce((sum, entry) => sum + (entry.duration || 0), 0) / weekendSleep.length : 0
+      
+      // Generate recommendations
+      const recommendations = []
+      if (averageSleep < 420) { // Less than 7 hours
+        recommendations.push("Try to get more sleep - aim for 7-9 hours per night")
+      }
+      if (averageQuality < 3) {
+        recommendations.push("Focus on improving sleep quality with better sleep hygiene")
+      }
+      if (consistency < 70) {
+        recommendations.push("Try to maintain a more consistent sleep schedule")
+      }
+      if (weekendAvg > weekdayAvg + 60) { // Sleeping 1+ hour more on weekends
+        recommendations.push("Consider going to bed earlier on weeknights")
+      }
+      
+      setSleepInsights({
+        hasData: true,
+        period: `${totalEntries} days`,
+        averageSleep: Math.round(averageSleep),
+        averageQuality: Math.round(averageQuality * 10) / 10,
+        bestSleep: {
+          duration: bestSleep.duration,
+          date: bestSleep.date,
+          quality: bestSleep.quality
+        },
+        worstSleep: {
+          duration: worstSleep.duration,
+          date: worstSleep.date,
+          quality: worstSleep.quality
+        },
+        qualityStats: {
+          excellent: Math.round((excellentSleep / totalEntries) * 100),
+          poor: Math.round((poorSleep / totalEntries) * 100)
+        },
+        consistency: Math.round(consistency),
+        weekdayAvg: Math.round(weekdayAvg),
+        weekendAvg: Math.round(weekendAvg),
+        recommendations,
+        totalEntries
+      })
+      
+      console.log('✅ Sleep insights calculated:', sleepInsights)
+      
+    } catch (error) {
+      console.error('❌ Error loading sleep insights:', error)
+      setSleepInsights({
+        hasData: false,
+        message: "Error loading insights. Please try again."
+      })
+    } finally {
+      setInsightsLoading(false)
     }
   }
 
@@ -524,85 +640,90 @@ export default function SleepScreen() {
     <Modal
       visible={showAddSleepModal}
       animationType="slide"
-      presentationStyle="pageSheet"
+      transparent={true}
     >
-      <SafeAreaView style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={() => setShowAddSleepModal(false)}>
-            <Text style={styles.modalCancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <Text style={styles.modalTitle}>Add Sleep Entry</Text>
-          <TouchableOpacity 
-            onPress={handleAddSleepEntry} 
-            disabled={saving}
-            style={saving ? { opacity: 0.5 } : {}}
-          >
-            <Text style={[styles.modalSaveText, saving && styles.disabledText]}>
-              {saving ? 'Saving...' : 'Save'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.modalContent}>
-          <View style={styles.formSection}>
-            <Text style={styles.formLabel}>Bedtime</Text>
-            <TouchableOpacity
-              style={styles.timeInput}
-              onPress={() => showTimePicker('bedtime')}
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setShowAddSleepModal(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Add Sleep Entry</Text>
+            <TouchableOpacity 
+              onPress={handleAddSleepEntry} 
+              disabled={saving}
+              style={saving ? { opacity: 0.5 } : {}}
             >
-              <Text style={styles.timeInputText}>{formatTime(sleepFormData.bedtime)}</Text>
-              <Ionicons name="time-outline" size={20} color="#6B7280" />
+              <Text style={[styles.modalSaveText, saving && styles.disabledText]}>
+                {saving ? 'Saving...' : 'Save'}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.formSection}>
-            <Text style={styles.formLabel}>Wake Time</Text>
-            <TouchableOpacity
-              style={styles.timeInput}
-              onPress={() => showTimePicker('wakeTime')}
-            >
-              <Text style={styles.timeInputText}>{formatTime(sleepFormData.wakeTime)}</Text>
-              <Ionicons name="time-outline" size={20} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.formSection}>
-            <Text style={styles.formLabel}>Sleep Quality</Text>
-            <View style={styles.qualitySelector}>
-              {[1, 2, 3, 4, 5].map((quality) => (
-                <TouchableOpacity
-                  key={quality}
-                  style={[
-                    styles.qualityOption,
-                    sleepFormData.quality === quality && styles.qualityOptionSelected
-                  ]}
-                  onPress={() => setSleepFormData(prev => ({ ...prev, quality }))}
-                >
-                  <Text style={[
-                    styles.qualityOptionText,
-                    sleepFormData.quality === quality && styles.qualityOptionTextSelected
-                  ]}>
-                    {quality}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Bedtime</Text>
+              <TouchableOpacity
+                style={styles.timeInput}
+                onPress={() => showTimePicker('bedtime')}
+              >
+                <Text style={styles.timeInputText}>{formatTime(sleepFormData.bedtime)}</Text>
+                <Ionicons name="time-outline" size={20} color="#6B7280" />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.qualityLabel}>{getQualityLabel(sleepFormData.quality)}</Text>
-          </View>
 
-          <View style={styles.formSection}>
-            <Text style={styles.formLabel}>Notes (Optional)</Text>
-            <TextInput
-              style={styles.notesInput}
-              placeholder="How was your sleep? Any factors that affected it?"
-              value={sleepFormData.notes}
-              onChangeText={(text) => setSleepFormData(prev => ({ ...prev, notes: text }))}
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Wake Time</Text>
+              <TouchableOpacity
+                style={styles.timeInput}
+                onPress={() => showTimePicker('wakeTime')}
+              >
+                <Text style={styles.timeInputText}>{formatTime(sleepFormData.wakeTime)}</Text>
+                <Ionicons name="time-outline" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Sleep Quality</Text>
+              <View style={styles.qualitySelector}>
+                {[1, 2, 3, 4, 5].map((quality) => (
+                  <TouchableOpacity
+                    key={quality}
+                    style={[
+                      styles.qualityOption,
+                      sleepFormData.quality === quality && styles.qualityOptionSelected
+                    ]}
+                    onPress={() => setSleepFormData(prev => ({ ...prev, quality }))}
+                  >
+                    <Text style={[
+                      styles.qualityOptionText,
+                      sleepFormData.quality === quality && styles.qualityOptionTextSelected
+                    ]}>
+                      {quality}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.qualityLabel}>{getQualityLabel(sleepFormData.quality)}</Text>
+            </View>
+
+            <View style={styles.formSection}>
+              <Text style={styles.formLabel}>Notes (Optional)</Text>
+              <TextInput
+                style={styles.notesInput}
+                placeholder="How was your sleep? Any factors that affected it?"
+                value={sleepFormData.notes}
+                onChangeText={(text) => setSleepFormData(prev => ({ ...prev, notes: text }))}
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+            
+            {/* Add bottom padding for safe scrolling */}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </View>
+      </View>
     </Modal>
   );
 
@@ -682,6 +803,97 @@ export default function SleepScreen() {
     </Modal>
   )
 
+  const SleepInsightsModal = () => (
+    <Modal
+      visible={showInsightsModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowInsightsModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.insightsModal}>
+          <View style={styles.insightsHeader}>
+            <Text style={styles.insightsTitle}>Sleep Insights</Text>
+            <TouchableOpacity onPress={() => setShowInsightsModal(false)}>
+              <Ionicons name="close" size={24} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.insightsContent} showsVerticalScrollIndicator={false}>
+            {insightsLoading ? (
+              <View style={styles.insightsLoading}>
+                <Ionicons name="analytics-outline" size={48} color="#8B5CF6" />
+                <Text style={styles.insightsLoadingText}>Analyzing your sleep patterns...</Text>
+              </View>
+            ) : !sleepInsights?.hasData ? (
+              <View style={styles.insightsEmpty}>
+                <Ionicons name="bed-outline" size={48} color="#D1D5DB" />
+                <Text style={styles.insightsEmptyTitle}>No Sleep Data</Text>
+                <Text style={styles.insightsEmptyText}>
+                  {sleepInsights?.message || "Start logging your sleep to see insights!"}
+                </Text>
+              </View>
+            ) : (
+              <>
+                {/* Overview Stats */}
+                <View style={styles.insightsSection}>
+                  <Text style={styles.insightsSectionTitle}>📊 Overview ({sleepInsights.period})</Text>
+                  <View style={styles.insightsGrid}>
+                   
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightCardValue}>{sleepInsights.averageQuality}/5</Text>
+                      <Text style={styles.insightCardLabel}>Avg Quality</Text>
+                    </View>
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightCardValue}>{sleepInsights.consistency}%</Text>
+                      <Text style={styles.insightCardLabel}>Consistency</Text>
+                    </View>
+                  </View>
+                </View>
+
+        
+
+                {/* Quality Distribution */}
+                <View style={styles.insightsSection}>
+                  <Text style={styles.insightsSectionTitle}>⭐ Sleep Quality</Text>
+                  <View style={styles.qualityStatsContainer}>
+                    <View style={styles.qualityStatItem}>
+                      <Text style={styles.qualityStatValue}>{sleepInsights.qualityStats.excellent}%</Text>
+                      <Text style={styles.qualityStatLabel}>Excellent Sleep</Text>
+                      <Text style={styles.qualityStatSub}>(4-5 stars)</Text>
+                    </View>
+                    <View style={styles.qualityStatItem}>
+                      <Text style={styles.qualityStatValue}>{sleepInsights.qualityStats.poor}%</Text>
+                      <Text style={styles.qualityStatLabel}>Poor Sleep</Text>
+                      <Text style={styles.qualityStatSub}>(1-2 stars)</Text>
+                    </View>
+                  </View>
+                </View>
+
+             
+
+                {/* Recommendations */}
+                {sleepInsights.recommendations.length > 0 && (
+                  <View style={styles.insightsSection}>
+                    <Text style={styles.insightsSectionTitle}>💡 Recommendations</Text>
+                    {sleepInsights.recommendations.map((rec, index) => (
+                      <View key={index} style={styles.recommendationItem}>
+                        <Text style={styles.recommendationBullet}>•</Text>
+                        <Text style={styles.recommendationText}>{rec}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                
+                <View style={{ height: 20 }} />
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  )
+
   return (
     <ProtectedRoute>
       <MainLayout
@@ -724,7 +936,10 @@ export default function SleepScreen() {
             
             <TouchableOpacity
               style={styles.quickActionButton}
-              onPress={() => Alert.alert('Coming Soon', 'Sleep insights feature is under development')}
+              onPress={() => {
+                setShowInsightsModal(true)
+                loadSleepInsights()
+              }}
             >
               <Ionicons name="analytics-outline" size={24} color="#10B981" />
               <Text style={styles.quickActionText}>View Insights</Text>
@@ -737,6 +952,7 @@ export default function SleepScreen() {
         
         {/* Add Plan Info Modal */}
         <PlanInfoModal />
+        <SleepInsightsModal />
       </MainLayout>
     </ProtectedRoute>
   );
@@ -907,9 +1123,18 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginTop: 8,
   },
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    width: '100%',
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -920,6 +1145,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   modalTitle: {
     fontSize: 18,
@@ -941,6 +1168,7 @@ const styles = StyleSheet.create({
   modalContent: {
     flex: 1,
     padding: 20,
+    backgroundColor: '#F3F4F6',
   },
   formSection: {
     marginBottom: 24,
@@ -961,6 +1189,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   timeInputText: {
     fontSize: 16,
@@ -970,16 +1203,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
+    paddingHorizontal: 5,
   },
   qualityOption: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   qualityOptionSelected: {
     backgroundColor: '#3B82F6',
@@ -997,6 +1236,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
+    marginTop: 4,
   },
   notesInput: {
     backgroundColor: 'white',
@@ -1007,6 +1247,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlignVertical: 'top',
     minHeight: 80,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   // Time Picker Styles
   timePickerContainer: {
@@ -1193,9 +1438,185 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     flex: 1,
   },
-  modalOverlay: {
+  insightsModal: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    marginTop: 'auto',
+    width: '100%',
+  },
+  insightsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  insightsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  insightsContent: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    padding: 20,
+  },
+  insightsLoading: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  insightsLoadingText: {
+    fontSize: 16,
+    color: '#8B5CF6',
+    marginTop: 16,
+  },
+  insightsEmpty: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  insightsEmptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  insightsEmptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  insightsSection: {
+    marginBottom: 24,
+  },
+  insightsSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  insightsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  insightCard: {
+    backgroundColor: '#F8FAFC',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  insightCardValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#8B5CF6',
+    marginBottom: 4,
+  },
+  insightCardLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  bestWorstContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  bestWorstCard: {
+    backgroundColor: '#F0FDF4',
+    padding: 16,
+    borderRadius: 12,
+    flex: 1,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  bestWorstTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#059669',
+    marginBottom: 8,
+  },
+  bestWorstValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#047857',
+    marginBottom: 4,
+  },
+  bestWorstDate: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  bestWorstQuality: {
+    fontSize: 12,
+    color: '#059669',
+  },
+  qualityStatsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  qualityStatItem: {
+    alignItems: 'center',
+  },
+  qualityStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#8B5CF6',
+    marginBottom: 4,
+  },
+  qualityStatLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  qualityStatSub: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  weekdayWeekendContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  weekdayWeekendItem: {
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: 16,
+    borderRadius: 12,
+    flex: 1,
+    marginHorizontal: 8,
+  },
+  weekdayWeekendLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  weekdayWeekendValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#B45309',
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    backgroundColor: '#F0F9FF',
+    padding: 12,
+    borderRadius: 8,
+  },
+  recommendationBullet: {
+    fontSize: 16,
+    color: '#0EA5E9',
+    marginRight: 8,
+    marginTop: 2,
+  },
+  recommendationText: {
+    fontSize: 14,
+    color: '#0C4A6E',
+    lineHeight: 20,
+    flex: 1,
   },
 });

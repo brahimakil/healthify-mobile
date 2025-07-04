@@ -128,6 +128,17 @@ export default function Nutrition() {
     snack: false
   })
 
+  // Add these 3 state variables after line 122 (after suggestionsLoading state):
+  // Mobile quantity modal states
+  const [showQuantityModal, setShowQuantityModal] = useState(false)
+  const [quantityModalData, setQuantityModalData] = useState<{
+    title: string
+    message: string
+    defaultValue: string
+    onConfirm: (value: string) => void
+  } | null>(null)
+  const [quantityInput, setQuantityInput] = useState('')
+
   // NEW: Load user custom foods
   const loadUserCustomFoods = async () => {
     if (!user) return
@@ -533,25 +544,18 @@ export default function Nutrition() {
           Alert.alert('Error', 'Please enter a valid number of servings')
         }
       } else {
-        Alert.prompt(
+        showQuantityPrompt(
           'Servings',
           `How many servings of ${searchResult.description}?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Add',
-              onPress: (servings) => {
-                const qty = parseFloat(servings || '1')
-                if (qty > 0) {
-                  addMealToDaily(searchResult, qty)
-                } else {
-                  Alert.alert('Error', 'Please enter a valid number of servings')
-                }
-              }
+          '1',
+          (servings) => {
+            const qty = parseFloat(servings || '1')
+            if (qty > 0) {
+              addMealToDaily(searchResult, qty)
+            } else {
+              Alert.alert('Error', 'Please enter a valid number of servings')
             }
-          ],
-          'plain-text',
-          '1'
+          }
         )
       }
     } else {
@@ -564,25 +568,18 @@ export default function Nutrition() {
           Alert.alert('Error', 'Please enter a valid quantity')
         }
       } else {
-        Alert.prompt(
+        showQuantityPrompt(
           'Quantity',
           'Enter quantity in grams:',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Add',
-              onPress: (quantity) => {
-                const qty = parseFloat(quantity || '100')
-                if (qty > 0) {
-                  addMealToDaily(searchResult, qty)
-                } else {
-                  Alert.alert('Error', 'Please enter a valid quantity')
-                }
-              }
+          '100',
+          (quantity) => {
+            const qty = parseFloat(quantity || '100')
+            if (qty > 0) {
+              addMealToDaily(searchResult, qty)
+            } else {
+              Alert.alert('Error', 'Please enter a valid quantity')
             }
-          ],
-          'plain-text',
-          '100'
+          }
         )
       }
     }
@@ -858,25 +855,18 @@ export default function Nutrition() {
                       Alert.alert('Error', `Please enter a valid ${quantityLabel} amount`)
                     }
                   } else {
-                    Alert.prompt(
+                    showQuantityPrompt(
                       'Edit Quantity',
                       `Enter new quantity (${quantityLabel}):`,
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Update',
-                          onPress: (newQuantity) => {
-                            const qty = parseFloat(newQuantity || '0')
-                            if (qty > 0) {
-                              updateMealQuantity(meal, qty)
-                            } else {
-                              Alert.alert('Error', `Please enter a valid ${quantityLabel} amount`)
-                            }
-                          }
+                      currentQuantity,
+                      (newQuantity) => {
+                        const qty = parseFloat(newQuantity || '0')
+                        if (qty > 0) {
+                          updateMealQuantity(meal, qty)
+                        } else {
+                          Alert.alert('Error', `Please enter a valid ${quantityLabel} amount`)
                         }
-                      ],
-                      'plain-text',
-                      currentQuantity
+                      }
                     )
                   }
                 }}
@@ -1130,25 +1120,18 @@ export default function Nutrition() {
             Alert.alert('Error', 'Please enter a valid number of servings')
           }
         } else {
-          Alert.prompt(
+          showQuantityPrompt(
             'Servings',
             `How many servings of ${suggestion.description}?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Add',
-                onPress: async (servings) => {
-                  const qty = parseFloat(servings || '1')
-                  if (qty > 0) {
-                    await addMealToDaily(suggestion, qty)
-                  } else {
-                    Alert.alert('Error', 'Please enter a valid number of servings')
-                  }
-                }
+            '1',
+            async (servings) => {
+              const qty = parseFloat(servings || '1')
+              if (qty > 0) {
+                await addMealToDaily(suggestion, qty)
+              } else {
+                Alert.alert('Error', 'Please enter a valid number of servings')
               }
-            ],
-            'plain-text',
-            '1'
+            }
           )
         }
       } else {
@@ -1161,25 +1144,18 @@ export default function Nutrition() {
             Alert.alert('Error', 'Please enter a valid quantity')
           }
         } else {
-          Alert.prompt(
+          showQuantityPrompt(
             'Quantity',
             'Enter quantity in grams:',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Add',
-                onPress: async (quantity) => {
-                  const qty = parseFloat(quantity || '100')
-                  if (qty > 0) {
-                    await addMealToDaily(suggestion, qty)
-                  } else {
-                    Alert.alert('Error', 'Please enter a valid quantity')
-                  }
-                }
+            '100',
+            async (quantity) => {
+              const qty = parseFloat(quantity || '100')
+              if (qty > 0) {
+                await addMealToDaily(suggestion, qty)
+              } else {
+                Alert.alert('Error', 'Please enter a valid quantity')
               }
-            ],
-            'plain-text',
-            '100'
+            }
           )
         }
       }
@@ -1290,6 +1266,13 @@ export default function Nutrition() {
       setIsAnalyzingImage(false);
     }
   };
+
+  // Add this function after handleLogout function (around line 250):
+  const showQuantityPrompt = (title: string, message: string, defaultValue: string, onConfirm: (value: string) => void) => {
+    setQuantityModalData({ title, message, defaultValue, onConfirm })
+    setQuantityInput(defaultValue)
+    setShowQuantityModal(true)
+  }
 
   if (loading) {
     return (
@@ -2175,6 +2158,46 @@ export default function Nutrition() {
         {/* Add Plan Info Modal */}
         <PlanInfoModal />
       </MainLayout>
+      {/* Mobile Quantity Modal */}
+      <Modal visible={showQuantityModal} transparent animationType="slide">
+        <View style={styles.quantityModalOverlay}>
+          <View style={styles.quantityModalContainer}>
+            <Text style={styles.quantityModalTitle}>
+              {quantityModalData?.title || 'Enter Quantity'}
+            </Text>
+            <Text style={styles.quantityModalMessage}>
+              {quantityModalData?.message || 'Enter quantity:'}
+            </Text>
+            <TextInput
+              style={styles.quantityModalInput}
+              value={quantityInput}
+              onChangeText={setQuantityInput}
+              keyboardType="numeric"
+              autoFocus={true}
+              selectTextOnFocus={true}
+            />
+            <View style={styles.quantityModalButtons}>
+              <TouchableOpacity
+                style={styles.quantityModalCancelButton}
+                onPress={() => setShowQuantityModal(false)}
+              >
+                <Text style={styles.quantityModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quantityModalConfirmButton}
+                onPress={() => {
+                  if (quantityInput.trim()) {
+                    setShowQuantityModal(false)
+                    quantityModalData?.onConfirm(quantityInput.trim())
+                  }
+                }}
+              >
+                <Text style={styles.quantityModalConfirmText}>Add</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ProtectedRoute>
   )
 }
@@ -3083,5 +3106,69 @@ const styles = StyleSheet.create({
   analyzingText: {
     color: '#10B981',
     fontSize: 14,
+  },
+  quantityModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  quantityModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 300,
+  },
+  quantityModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  quantityModalMessage: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  quantityModalInput: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  quantityModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quantityModalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  quantityModalCancelText: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  quantityModalConfirmButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+  },
+  quantityModalConfirmText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 })

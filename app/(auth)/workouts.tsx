@@ -1489,22 +1489,28 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
   },
   addExerciseModal: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    margin: 20,
-    maxHeight: '85%',
-    width: '90%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 0,
+    width: '100%',
+    maxHeight: '90%',
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
   modalTitle: {
     fontSize: 20,
@@ -1512,7 +1518,8 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   modalContent: {
-    maxHeight: '100%',
+    flex: 1,
+    paddingBottom: 20,
   },
   browseButton: {
     backgroundColor: '#3B82F6',
@@ -1573,7 +1580,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 30,
   },
   addExerciseButtonText: {
     color: 'white',
@@ -1582,6 +1589,7 @@ const styles = StyleSheet.create({
   },
   exerciseLibrary: {
     flex: 1,
+    paddingBottom: 20,
   },
   searchSection: {
     flexDirection: 'row',
@@ -1596,6 +1604,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     marginRight: 8,
+    backgroundColor: 'white',
   },
   searchButton: {
     backgroundColor: '#3B82F6',
@@ -1607,6 +1616,7 @@ const styles = StyleSheet.create({
   },
   exerciseLibraryList: {
     flex: 1,
+    paddingBottom: 20,
   },
   libraryExerciseCard: {
     backgroundColor: '#F9FAFB',

@@ -1,26 +1,27 @@
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    query,
-    setDoc,
-    Timestamp,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import {
-    DailySleepPlan,
-    DailySleepSummary,
-    Nap,
-    SleepEntry,
-    SleepGoals,
-    SleepPattern,
-    SleepQualityLabel,
-    WeeklySleepPlan,
-    WeeklySleepStats
+  DailySleepPlan,
+  DailySleepSummary,
+  Nap,
+  SleepEntry,
+  SleepGoals,
+  SleepPattern,
+  SleepQualityLabel,
+  WeeklySleepPlan,
+  WeeklySleepStats
 } from '../types/sleep';
 import { db } from '../utils/firebase';
 
@@ -157,6 +158,66 @@ class SleepService {
       } as SleepEntry;
     } catch (error) {
       console.error('Error getting daily sleep entry:', error);
+      throw error;
+    }
+  }
+
+  async getSleepHistory(userId: string, startDate: Date, endDate: Date): Promise<SleepEntry[]> {
+    try {
+      console.log('🔍 Fetching sleep history for user:', userId, 'from', startDate.toISOString(), 'to', endDate.toISOString());
+      
+      const startDateStr = this.formatDate(startDate);
+      const endDateStr = this.formatDate(endDate);
+      
+      const q = query(
+        collection(db, this.SLEEP_ENTRIES_COLLECTION),
+        where('userId', '==', userId),
+        where('date', '>=', startDateStr),
+        where('date', '<=', endDateStr),
+        orderBy('date', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      console.log('📊 Found', querySnapshot.docs.length, 'sleep entries');
+      
+      const entries: SleepEntry[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        try {
+          const entry: SleepEntry = {
+            id: doc.id,
+            userId: data.userId,
+            date: data.date,
+            bedtime: data.bedtime.toDate(),
+            wakeTime: data.wakeTime.toDate(),
+            sleepDuration: data.sleepDuration,
+            quality: data.quality || data.sleepQuality, // Handle both field names
+            notes: data.notes || '',
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+            naps: data.naps?.map((nap: any) => ({
+              id: nap.id,
+              startTime: nap.startTime.toDate(),
+              endTime: nap.endTime.toDate(),
+              duration: nap.duration,
+              quality: nap.quality
+            })) || []
+          };
+          
+          entries.push(entry);
+        } catch (error) {
+          console.error('❌ Error parsing sleep entry:', doc.id, error);
+          // Skip invalid entries but continue processing
+        }
+      });
+      
+      console.log('✅ Successfully parsed', entries.length, 'sleep entries');
+      return entries;
+      
+    } catch (error) {
+      console.error('❌ Error getting sleep history:', error);
       throw error;
     }
   }
