@@ -364,10 +364,10 @@ export class NutritionService {
   private static convertUSDAToFoodItem(data: any): FoodItem {
     const nutrients = data.foodNutrients || []
     const nutritionPer100g: NutritionInfo = {
-      calories: this.findNutrientValue(nutrients, 'Energy') || 0,
-      protein: this.findNutrientValue(nutrients, 'Protein') || 0,
-      carbs: this.findNutrientValue(nutrients, 'Carbohydrate') || 0,
-      fat: this.findNutrientValue(nutrients, 'Total lipid') || 0,
+      calories: this.findNutrientValue(nutrients, 'Energy') ?? 0,
+      protein: this.findNutrientValue(nutrients, 'Protein') ?? 0,
+      carbs: this.findNutrientValue(nutrients, 'Carbohydrate') ?? 0,
+      fat: this.findNutrientValue(nutrients, 'Total lipid') ?? 0,
       fiber: this.findNutrientValue(nutrients, 'Fiber'),
       sugar: this.findNutrientValue(nutrients, 'Sugars'),
       sodium: this.findNutrientValue(nutrients, 'Sodium')
@@ -378,34 +378,36 @@ export class NutritionService {
       name: data.description || 'Unknown Food',
       description: data.description || '',
       brand: data.brandOwner || '',
-        servingSize: 100,
-        servingUnit: 'g',
+      servingSize: 100,
+      servingUnit: 'g',
       nutritionPer100g,
       isCustom: false
     }
   }
 
-  private static findNutrientValue(nutrients: any[], nutrientName: string): number | undefined {
+  private static findNutrientValue(nutrients: any[], nutrientName: string): number | null {
     const nutrient = nutrients.find((n: any) => 
       n.nutrient?.name?.toLowerCase().includes(nutrientName.toLowerCase())
     )
-    return nutrient?.amount
+    return nutrient?.amount ?? null
   }
 
   private static getMockFoodDetails(fdcId: string): FoodItem {
-    // Return mock food details for fallback
     return {
       id: fdcId,
       name: 'Unknown Food',
       description: 'Food item',
-        brand: '',
-        servingSize: 100,
-        servingUnit: 'g',
-        nutritionPer100g: {
+      brand: '',
+      servingSize: 100,
+      servingUnit: 'g',
+      nutritionPer100g: {
         calories: 100,
         protein: 5,
         carbs: 15,
-        fat: 3
+        fat: 3,
+        fiber: null,
+        sugar: null,
+        sodium: null
       },
       isCustom: false
     }
@@ -429,15 +431,14 @@ export class NutritionService {
         protein: foodData.nutritionPer100g.protein,
         carbs: foodData.nutritionPer100g.carbs,
         fat: foodData.nutritionPer100g.fat,
-        // Replace undefined values with 0 or null
-        fiber: foodData.nutritionPer100g.fiber ?? 0,
-        sugar: foodData.nutritionPer100g.sugar ?? 0,
-        sodium: foodData.nutritionPer100g.sodium ?? 0
+        fiber: foodData.nutritionPer100g.fiber ?? null,
+        sugar: foodData.nutritionPer100g.sugar ?? null,
+        sodium: foodData.nutritionPer100g.sodium ?? null
       }
       
       const foodItem: Omit<FoodItem, 'id'> & { userId: string } = {
         ...foodData,
-        nutritionPer100g: sanitizedNutrition, // Use sanitized nutrition data
+        nutritionPer100g: sanitizedNutrition,
         isCustom: true,
         userId,
         createdAt: new Date(),

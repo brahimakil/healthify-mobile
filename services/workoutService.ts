@@ -1146,8 +1146,8 @@ class WorkoutService {
       const lastWeekKey = `lastWeekReset_${userId}`;
       const currentWeekStart = this.getWeekStartDate();
       
-      // Check local storage or a simple flag
-      const lastResetWeek = localStorage?.getItem(lastWeekKey);
+      // Use AsyncStorage instead of localStorage
+      const lastResetWeek = await AsyncStorage.getItem(lastWeekKey);
       
       if (!lastResetWeek || lastResetWeek !== currentWeekStart) {
         console.log('🔄 New week detected, resetting workout progress...');
@@ -1169,10 +1169,8 @@ class WorkoutService {
           }
         }
         
-        // Update the stored week
-        if (localStorage) {
-          localStorage.setItem(lastWeekKey, currentWeekStart);
-        }
+        // Update the stored week using AsyncStorage
+        await AsyncStorage.setItem(lastWeekKey, currentWeekStart);
         
         console.log('✅ Weekly workout progress reset completed');
       }

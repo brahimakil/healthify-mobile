@@ -462,10 +462,15 @@ export default function Nutrition() {
           const carbs = searchResult.foodNutrients.find(n => n.nutrientName === 'Carbohydrate')?.value || 20
           const fat = searchResult.foodNutrients.find(n => n.nutrientName === 'Total fat')?.value || 8
           
+          // ✅ FIX: Extract optional nutrition values safely with null fallback
+          const fiber = searchResult.foodNutrients.find(n => n.nutrientName === 'Fiber')?.value ?? null
+          const sugar = searchResult.foodNutrients.find(n => n.nutrientName === 'Sugar')?.value ?? null
+          const sodium = searchResult.foodNutrients.find(n => n.nutrientName === 'Sodium')?.value ?? null
+          
           // Create food item directly from suggestion data
           foodDetails = {
             id: searchResult.fdcId,
-            name: searchResult.description, // ✅ This preserves the correct name!
+            name: searchResult.description,
             description: searchResult.description,
             brand: searchResult.brandOwner || 'AI Suggestion',
             servingSize: searchResult.servingSize,
@@ -474,7 +479,10 @@ export default function Nutrition() {
               calories,
               protein,
               carbs,
-              fat
+              fat,
+              fiber,
+              sugar,
+              sodium
             },
             isCustom: false
           }

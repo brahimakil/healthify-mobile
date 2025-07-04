@@ -184,6 +184,7 @@ export default function SleepScreen() {
       
       const sleepEntries = await sleepService.getSleepHistory(user.uid, startDate, endDate)
       console.log('📈 Sleep entries loaded:', sleepEntries.length)
+      console.log('📊 Sample entry:', sleepEntries[0]) // Debug log
       
       if (sleepEntries.length === 0) {
         setSleepInsights({
@@ -193,23 +194,23 @@ export default function SleepScreen() {
         return
       }
       
-      // Calculate insights
+      // ✅ FIX: Use correct field names (sleepDuration instead of duration)
       const totalEntries = sleepEntries.length
-      const totalSleep = sleepEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0)
+      const totalSleep = sleepEntries.reduce((sum, entry) => sum + (entry.sleepDuration || 0), 0)
       const averageSleep = totalSleep / totalEntries
-      const averageQuality = sleepEntries.reduce((sum, entry) => sum + entry.quality, 0) / totalEntries
+      const averageQuality = sleepEntries.reduce((sum, entry) => sum + (entry.quality || 3), 0) / totalEntries
       
       // Find best and worst sleep days
-      const sortedByDuration = [...sleepEntries].sort((a, b) => (b.duration || 0) - (a.duration || 0))
+      const sortedByDuration = [...sleepEntries].sort((a, b) => (b.sleepDuration || 0) - (a.sleepDuration || 0))
       const bestSleep = sortedByDuration[0]
       const worstSleep = sortedByDuration[sortedByDuration.length - 1]
       
       // Quality analysis
-      const excellentSleep = sleepEntries.filter(entry => entry.quality >= 4).length
-      const poorSleep = sleepEntries.filter(entry => entry.quality <= 2).length
+      const excellentSleep = sleepEntries.filter(entry => (entry.quality || 3) >= 4).length
+      const poorSleep = sleepEntries.filter(entry => (entry.quality || 3) <= 2).length
       
       // Sleep consistency (how much sleep varies)
-      const sleepTimes = sleepEntries.map(entry => entry.duration || 0)
+      const sleepTimes = sleepEntries.map(entry => entry.sleepDuration || 0)
       const avgDuration = sleepTimes.reduce((sum, time) => sum + time, 0) / sleepTimes.length
       const variance = sleepTimes.reduce((sum, time) => sum + Math.pow(time - avgDuration, 2), 0) / sleepTimes.length
       const consistency = Math.max(0, 100 - (Math.sqrt(variance) / 60 * 10)) // Convert to percentage
@@ -225,9 +226,9 @@ export default function SleepScreen() {
       })
       
       const weekdayAvg = weekdaySleep.length > 0 ? 
-        weekdaySleep.reduce((sum, entry) => sum + (entry.duration || 0), 0) / weekdaySleep.length : 0
+        weekdaySleep.reduce((sum, entry) => sum + (entry.sleepDuration || 0), 0) / weekdaySleep.length : 0
       const weekendAvg = weekendSleep.length > 0 ? 
-        weekendSleep.reduce((sum, entry) => sum + (entry.duration || 0), 0) / weekendSleep.length : 0
+        weekendSleep.reduce((sum, entry) => sum + (entry.sleepDuration || 0), 0) / weekendSleep.length : 0
       
       // Generate recommendations
       const recommendations = []
@@ -243,19 +244,22 @@ export default function SleepScreen() {
       if (weekendAvg > weekdayAvg + 60) { // Sleeping 1+ hour more on weekends
         recommendations.push("Consider going to bed earlier on weeknights")
       }
+      if (recommendations.length === 0) {
+        recommendations.push("Great job! Your sleep patterns look healthy. Keep it up!")
+      }
       
-      setSleepInsights({
+      const insights = {
         hasData: true,
         period: `${totalEntries} days`,
         averageSleep: Math.round(averageSleep),
         averageQuality: Math.round(averageQuality * 10) / 10,
         bestSleep: {
-          duration: bestSleep.duration,
+          duration: bestSleep.sleepDuration,
           date: bestSleep.date,
           quality: bestSleep.quality
         },
         worstSleep: {
-          duration: worstSleep.duration,
+          duration: worstSleep.sleepDuration,
           date: worstSleep.date,
           quality: worstSleep.quality
         },
@@ -268,9 +272,10 @@ export default function SleepScreen() {
         weekendAvg: Math.round(weekendAvg),
         recommendations,
         totalEntries
-      })
+      }
       
-      console.log('✅ Sleep insights calculated:', sleepInsights)
+      console.log('✅ Sleep insights calculated:', insights)
+      setSleepInsights(insights)
       
     } catch (error) {
       console.error('❌ Error loading sleep insights:', error)
@@ -839,7 +844,10 @@ export default function SleepScreen() {
                 <View style={styles.insightsSection}>
                   <Text style={styles.insightsSectionTitle}>📊 Overview ({sleepInsights.period})</Text>
                   <View style={styles.insightsGrid}>
-                   
+                    <View style={styles.insightCard}>
+                      <Text style={styles.insightCardValue}>{Math.round(sleepInsights.averageSleep / 60)}h {sleepInsights.averageSleep % 60}m</Text>
+                      <Text style={styles.insightCardLabel}>Avg Sleep</Text>
+                    </View>
                     <View style={styles.insightCard}>
                       <Text style={styles.insightCardValue}>{sleepInsights.averageQuality}/5</Text>
                       <Text style={styles.insightCardLabel}>Avg Quality</Text>
@@ -850,8 +858,6 @@ export default function SleepScreen() {
                     </View>
                   </View>
                 </View>
-
-        
 
                 {/* Quality Distribution */}
                 <View style={styles.insightsSection}>
@@ -869,8 +875,6 @@ export default function SleepScreen() {
                     </View>
                   </View>
                 </View>
-
-             
 
                 {/* Recommendations */}
                 {sleepInsights.recommendations.length > 0 && (
@@ -934,16 +938,7 @@ export default function SleepScreen() {
               <Text style={styles.quickActionText}>Log Sleep</Text>
             </TouchableOpacity>
             
-            <TouchableOpacity
-              style={styles.quickActionButton}
-              onPress={() => {
-                setShowInsightsModal(true)
-                loadSleepInsights()
-              }}
-            >
-              <Ionicons name="analytics-outline" size={24} color="#10B981" />
-              <Text style={styles.quickActionText}>View Insights</Text>
-            </TouchableOpacity>
+            
           </View>
         </ScrollView>
 
@@ -1442,15 +1437,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
+    maxHeight: '85%',
     marginTop: 'auto',
     width: '100%',
+    paddingBottom: 20,
   },
   insightsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
@@ -1461,20 +1458,24 @@ const styles = StyleSheet.create({
   },
   insightsContent: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   insightsLoading: {
     alignItems: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   insightsLoadingText: {
     fontSize: 16,
     color: '#8B5CF6',
     marginTop: 16,
+    textAlign: 'center',
   },
   insightsEmpty: {
     alignItems: 'center',
     paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   insightsEmptyTitle: {
     fontSize: 18,
@@ -1482,14 +1483,16 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 16,
     marginBottom: 8,
+    textAlign: 'center',
   },
   insightsEmptyText: {
     fontSize: 14,
     color: '#9CA3AF',
     textAlign: 'center',
+    lineHeight: 20,
   },
   insightsSection: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   insightsSectionTitle: {
     fontSize: 16,
@@ -1500,6 +1503,7 @@ const styles = StyleSheet.create({
   insightsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
   },
   insightCard: {
     backgroundColor: '#F8FAFC',
@@ -1508,6 +1512,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     marginHorizontal: 4,
+    minWidth: 120,
   },
   insightCardValue: {
     fontSize: 18,
@@ -1520,48 +1525,19 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
   },
-  bestWorstContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  bestWorstCard: {
-    backgroundColor: '#F0FDF4',
-    padding: 16,
-    borderRadius: 12,
-    flex: 1,
-    marginHorizontal: 4,
-    alignItems: 'center',
-  },
-  bestWorstTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#059669',
-    marginBottom: 8,
-  },
-  bestWorstValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#047857',
-    marginBottom: 4,
-  },
-  bestWorstDate: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  bestWorstQuality: {
-    fontSize: 12,
-    color: '#059669',
-  },
   qualityStatsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    flexWrap: 'wrap',
   },
   qualityStatItem: {
     alignItems: 'center',
+    marginHorizontal: 8,
+    marginVertical: 8,
+    minWidth: 120,
   },
   qualityStatValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: '#8B5CF6',
     marginBottom: 4,
@@ -1571,38 +1547,17 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#1F2937',
     marginBottom: 2,
+    textAlign: 'center',
   },
   qualityStatSub: {
     fontSize: 12,
     color: '#6B7280',
-  },
-  weekdayWeekendContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  weekdayWeekendItem: {
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    padding: 16,
-    borderRadius: 12,
-    flex: 1,
-    marginHorizontal: 8,
-  },
-  weekdayWeekendLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#92400E',
-    marginBottom: 4,
-  },
-  weekdayWeekendValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#B45309',
+    textAlign: 'center',
   },
   recommendationItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
     backgroundColor: '#F0F9FF',
     padding: 12,
     borderRadius: 8,
