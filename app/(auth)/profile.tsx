@@ -169,15 +169,21 @@ export default function Profile() {
       setSaving(true)
       console.log('💾 Starting profile save...')
       
+      // Helper function to safely parse integer or return null
+      const safeParseInt = (value: string): number | null => {
+        const parsed = parseInt(value)
+        return isNaN(parsed) ? null : parsed
+      }
+      
       const updatedProfile = {
         ...userProfile!,
         displayName: formData.displayName,
         profile: {
           ...userProfile!.profile,
-          age: formData.age ? parseInt(formData.age) : undefined,
-          height: formData.height ? parseInt(formData.height) : undefined,
-          currentWeight: formData.currentWeight ? parseInt(formData.currentWeight) : undefined,
-          goalWeight: formData.goalWeight ? parseInt(formData.goalWeight) : undefined,
+          age: safeParseInt(formData.age),
+          height: safeParseInt(formData.height),
+          currentWeight: safeParseInt(formData.currentWeight),
+          goalWeight: safeParseInt(formData.goalWeight),
           healthGoals: formData.healthGoals,
         }
       }
@@ -205,16 +211,22 @@ export default function Profile() {
     try {
       setSaving(true)
       
+      // Helper function to safely parse integer or return null
+      const safeParseInt = (value: string): number | null => {
+        const parsed = parseInt(value)
+        return isNaN(parsed) ? null : parsed
+      }
+      
       // First update the profile
       const updatedProfile = {
         ...userProfile!,
         displayName: formData.displayName,
         profile: {
           ...userProfile!.profile,
-          age: formData.age ? parseInt(formData.age) : undefined,
-          height: formData.height ? parseInt(formData.height) : undefined,
-          currentWeight: formData.currentWeight ? parseInt(formData.currentWeight) : undefined,
-          goalWeight: formData.goalWeight ? parseInt(formData.goalWeight) : undefined,
+          age: safeParseInt(formData.age),
+          height: safeParseInt(formData.height),
+          currentWeight: safeParseInt(formData.currentWeight),
+          goalWeight: safeParseInt(formData.goalWeight),
           healthGoals: formData.healthGoals,
         }
       }

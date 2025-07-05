@@ -662,7 +662,36 @@ export class NutritionService {
       } as DailyNutritionGoals
     }
     
-    // Return default goals if none exist
+    // If no goals exist for this date, try to get goals from current plan
+    try {
+      const { PlanGenerationService } = await import('./planGenerationService')
+      const currentPlan = await PlanGenerationService.getCurrentPlan(userId)
+      
+      if (currentPlan) {
+        console.log('📋 Using goals from current plan:', currentPlan.healthGoal)
+        return {
+          date,
+          userId,
+          targetMeals: {
+            breakfast: 1,
+            lunch: 1,
+            dinner: 1,
+            snacks: currentPlan.healthGoal === 'Gain Weight' || currentPlan.healthGoal === 'Build Muscle' ? 3 : 2
+          },
+          calorieGoal: currentPlan.nutritionGoals.calorieGoal,
+          proteinGoal: currentPlan.nutritionGoals.proteinGoal,
+          carbsGoal: currentPlan.nutritionGoals.carbsGoal,
+          fatGoal: currentPlan.nutritionGoals.fatGoal,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not load current plan goals, using defaults:', error)
+    }
+    
+    // Fallback to default goals if no plan exists
+    console.log('📋 Using default goals (no plan found)')
     return {
       date,
       userId,

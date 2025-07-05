@@ -195,7 +195,10 @@ export default function Nutrition() {
       // DEBUG: Log before loading
       console.log('📊 About to load summary...')
       
-      const summary = await NutritionService.getDailySummary(user.uid, selectedDate)
+      const [summary, plan] = await Promise.all([
+        NutritionService.getDailySummary(user.uid, selectedDate),
+        PlanGenerationService.getCurrentPlan(user.uid)
+      ])
       
       console.log('✅ Daily summary loaded:', {
         totalMeals: summary.meals.length,
@@ -210,10 +213,16 @@ export default function Nutrition() {
           type: m.mealType,
           name: m.meal?.name || m.foodItem?.name,
           calories: m.actualNutrition.calories
-        }))
+        })),
+        planGoals: plan ? {
+          healthGoal: plan.healthGoal,
+          calories: plan.nutritionGoals.calorieGoal,
+          protein: plan.nutritionGoals.proteinGoal
+        } : null
       })
       
       setDailySummary(summary)
+      setCurrentPlan(plan)
     } catch (error) {
       console.error('❌ Error loading daily summary:', error)
       Alert.alert('Error', 'Failed to load nutrition data')

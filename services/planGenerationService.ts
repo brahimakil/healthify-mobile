@@ -113,6 +113,19 @@ export class PlanGenerationService {
       // Generate new comprehensive plan
       await this.generateComprehensivePlan(user, newHealthGoal)
 
+      // IMPORTANT: Set goals for today's date to ensure immediate visibility
+      const { GoalCalculationService } = await import('./goalCalculationService')
+      const { NutritionService } = await import('./nutritionService')
+      
+      const today = new Date()
+      const dateString = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`
+      
+      const todayGoals = GoalCalculationService.calculatePersonalizedGoals(user, newHealthGoal)
+      await NutritionService.setDailyGoals({
+        ...todayGoals,
+        date: dateString
+      })
+
       console.log('✅ Health plan switched successfully!')
 
     } catch (error) {
